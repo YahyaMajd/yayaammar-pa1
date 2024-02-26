@@ -3,54 +3,48 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
-
-#include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <unistd.h>
-
-#include <pthread.h>
 #include <errno.h>
+#include <time.h> // Include this header
 
-#define BUFFER_SIZE 1024  // Adjust based on your MTU and header size
-#define HEADER_SIZE 8     // Example header size for sequence number (and possibly other info)
+#define BUFFER_SIZE 1024
+#define HEADER_SIZE 8
 #define DATA_SIZE (BUFFER_SIZE - HEADER_SIZE)
-#define ACK_TIMEOUT 2     // Timeout in seconds for ACKs
+#define ACK_TIMEOUT 2  // Timeout in seconds for ACKs
 
+struct packet {
+    unsigned int seq_num;
+    char data[DATA_SIZE];
+    int acked;  // 1 if ACK received, 0 otherwise
+    time_t send_time;  // Time when the packet was last sent
+};
 
-/**
- * Function: rsend
- * ----------------
- * Sends the first 'bytesToTransfer' bytes of a file specified by 'filename'
- * to a receiver at 'hostname':'hostUDPport' using UDP, implementing a basic
- * form of reliability over an otherwise unreliable protocol.
- *
- * The function splits the file into chunks, each preceded by a header containing
- * a sequence number. It then sends these chunks over UDP. The receiver is expected
- * to send back acknowledgments (ACKs) for each received chunk, although this
- * implementation does not yet handle the ACK reception and retransmission of lost packets.
- *
- * Parameters:
- * - hostname: The domain name or IP address of the receiver.
- * - hostUDPport: The UDP port number on the receiver to send data to.
- * - filename: The path to the file to be transferred.
- * - bytesToTransfer: The number of bytes from the file to be transferred.
- *
- * Implementation Details:
- * 1. Initialization: Creates a UDP socket and sets a timeout for ACK reception.
- * 2. Receiver Address Configuration: Sets up the receiver's address using the provided hostname and port.
- * 3. File Reading: Opens the specified file and reads it in chunks.
- * 4. Data Transmission: Each chunk, prefixed with a sequence number, is sent to the receiver.
- * 5. Sequence Numbering: Implements a simple sequence number mechanism for tracking packets.
- * 6. ACK Handling (TODO): A placeholder exists for implementing ACK reception and packet retransmission logic.
- * 7. Cleanup: Closes the file and socket resources before exiting.
- *
- * Note: The actual reliability mechanism (ACK handling and retransmission) is not implemented and
- * must be added to achieve reliable data transfer over UDP.
- *
- * Usage:
- * The function is designed to be called with command line parameters specifying the receiver details,
- * the file to be transferred, and the number of bytes to transfer.
- */
+struct ack_packet {
+    unsigned int seq_num;
+};
+
+void resend_packets(struct packet packets[], int sockfd, struct sockaddr_in *receiverAddr, int *outstanding_packets) {
+    time_t current_time = time(NULL);
+
+    for (int i = 0; i < *outstanding_packets; i++) {
+        // Check if the packet was not acknowledged and if the resend timeout has passed
+        if (!packets[i].acked && difftime(current_time, packets[i].send_time) > ACK_TIMEOUT) {
+            char buffer[BUFFER_SIZE];
+            *((unsigned int *)buffer) = htonl(packets[i].seq_num);
+            memcpy(buffer + HEADER_SIZE, packets[i].data, DATA_SIZE);
+
+            if (sendto(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)receiverAddr, sizeof(*receiverAddr)) < 0) {
+                perror("Sendto failed during retransmission");
+                continue;  // Try to send next packets
+            }
+
+            packets[i].send_time = current_time;  // Update send time for the retransmitted packet
+            printf("Packet %u retransmitted.\n", packets[i].seq_num);
+        }
+    }
+}
 
 
 void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsigned long long int bytesToTransfer) {
@@ -96,28 +90,52 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
         exit(EXIT_FAILURE);
     }
 
-    // Read and send file in chunks
-    while (bytesSent < bytesToTransfer && fread(buffer + HEADER_SIZE, 1, DATA_SIZE, file) > 0) {
-        // Prepare packet with sequence number (and possibly other header info)
-        *((unsigned int*)buffer) = htonl(seqNum);
+    while (bytesSent < bytesToTransfer) {
+        // Check if there is data to read and send
+        if (fread(buffer + HEADER_SIZE, 1, DATA_SIZE, file) > 0) {
+            ssize_t packetSize = DATA_SIZE + HEADER_SIZE;
+            *((unsigned int*)buffer) = htonl(seqNum); // Sequence number in network byte order
 
-        // Calculate and send packet size
-        ssize_t packetSize = DATA_SIZE + HEADER_SIZE;
-        if (sendto(sockfd, buffer, packetSize, 0, (struct sockaddr*)&receiverAddr, sizeof(receiverAddr)) < 0) {
-            perror("Sendto failed");
-            break;
+            // Transmit the packet
+            if (sendto(sockfd, buffer, packetSize, 0, (struct sockaddr*)&receiverAddr, sizeof(receiverAddr)) < 0) {
+                perror("Sendto failed");
+                break;
+            }
+
+            struct ack_packet ack;
+            socklen_t fromlen = sizeof(receiverAddr);
+
+            // Attempt to receive ACK
+            if (recvfrom(sockfd, &ack, sizeof(ack), 0, (struct sockaddr*)&receiverAddr, &fromlen) < 0) {
+                if (errno == EWOULDBLOCK) {
+                    printf("ACK timeout, need to retransmit\n");
+                    fseek(file, -DATA_SIZE, SEEK_CUR); // Move file pointer back to re-read and re-send the same chunk
+                    continue; // Attempt to resend the packet
+                } else {
+                    perror("recvfrom failed");
+                    break;
+                }
+            }
+
+            // Convert ack.seq_num from network byte order to host byte order before comparison
+            ack.seq_num = ntohl(ack.seq_num);
+            if (ack.seq_num == seqNum) {
+                // ACK received correctly, proceed to next packet
+                bytesSent += DATA_SIZE;
+                seqNum++;
+            } else {
+                printf("Received out of order or incorrect ACK, expected: %u, got: %u\n", seqNum, ack.seq_num);
+                fseek(file, -DATA_SIZE, SEEK_CUR); // Move file pointer back for retransmission
+            }
+        } else {
+            break; // No more data to read/send
         }
-
-        // Increment counters
-        bytesSent += DATA_SIZE;
-        seqNum++;
-
-        // TODO: Implement ACK receiving and retransmission logic
     }
 
     fclose(file);
     close(sockfd);
 }
+
 
 int main(int argc, char** argv) {
     // This is a skeleton of a main function.
@@ -135,9 +153,6 @@ int main(int argc, char** argv) {
     hostUDPport = (unsigned short int) atoi(argv[2]);
     hostname = argv[1];
     bytesToTransfer = atoll(argv[4]);
-
-    // Now actually use them
-    rsend(hostname, hostUDPport, argv[3], bytesToTransfer);
 
     return (EXIT_SUCCESS);
 }
