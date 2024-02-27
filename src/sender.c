@@ -102,6 +102,13 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
                 break;
             }
 
+            /*
+            NOTE: here we're doing a send and wait mechanism, but isn't that ineffective/not what we're looking for.
+            Also for out of order acks does resetting the file pointer not just mean we're gonna be resending 
+            anything after that point?
+            Also also, shouldn't out of order packets be handled by the receiver?
+            */
+
             struct ack_packet ack;
             socklen_t fromlen = sizeof(receiverAddr);
 
@@ -136,6 +143,28 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
     close(sockfd);
 }
 
+
+/* PLAN
+Main requirements:
+- data is reliably transferred even in the case of dropped or out of order packets
+- 70% utilization (cannot just use a send and wait method)
+
+Selective repeat method:
+- data from above (from file)
+    - if next avilable seq# in window, send packet
+- timeout(n): resend packet n, restart timer
+- ack(n)
+    - mark packet n as received
+    - if n is smallest unAcked, advance window to next unAcked
+*/
+
+/*
+Handle timeout
+*/
+
+/*
+Send packet
+*/
 
 int main(int argc, char** argv) {
     // This is a skeleton of a main function.
