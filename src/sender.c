@@ -7,12 +7,13 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <errno.h>
-#include <time.h> // Include this header
+#include <time.h>
 
 #define BUFFER_SIZE 1024
 #define HEADER_SIZE 8
 #define DATA_SIZE (BUFFER_SIZE - HEADER_SIZE)
 #define ACK_TIMEOUT 2  // Timeout in seconds for ACKs
+#define INITIAL_PACKETS_SIZE 10  // Initial size of the packets array
 
 struct packet {
     unsigned int seq_num;
@@ -25,11 +26,27 @@ struct ack_packet {
     unsigned int seq_num;
 };
 
-void resend_packets(struct packet packets[], int sockfd, struct sockaddr_in *receiverAddr, int *outstanding_packets) {
+struct packet *packets = NULL; // Dynamic array of packets
+int num_packets = 0;  // Number of packets currently being tracked
+int allocated_packets = 0; // Allocated size of the packets array
+
+void resize_packets_array() {
+    if (num_packets >= allocated_packets) {
+        int new_size = allocated_packets == 0 ? INITIAL_PACKETS_SIZE : allocated_packets * 2;
+        struct packet *new_array = realloc(packets, new_size * sizeof(struct packet));
+        if (!new_array) {
+            perror("Failed to resize packets array");
+            exit(EXIT_FAILURE);
+        }
+        packets = new_array;
+        allocated_packets = new_size;
+    }
+}
+
+void resend_packets(int sockfd, struct sockaddr_in *receiverAddr) {
     time_t current_time = time(NULL);
 
-    for (int i = 0; i < *outstanding_packets; i++) {
-        // Check if the packet was not acknowledged and if the resend timeout has passed
+    for (int i = 0; i < num_packets; i++) {
         if (!packets[i].acked && difftime(current_time, packets[i].send_time) > ACK_TIMEOUT) {
             char buffer[BUFFER_SIZE];
             *((unsigned int *)buffer) = htonl(packets[i].seq_num);
@@ -37,15 +54,14 @@ void resend_packets(struct packet packets[], int sockfd, struct sockaddr_in *rec
 
             if (sendto(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)receiverAddr, sizeof(*receiverAddr)) < 0) {
                 perror("Sendto failed during retransmission");
-                continue;  // Try to send next packets
+                continue;
             }
 
-            packets[i].send_time = current_time;  // Update send time for the retransmitted packet
+            packets[i].send_time = current_time;
             printf("Packet %u retransmitted.\n", packets[i].seq_num);
         }
     }
 }
-
 
 void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsigned long long int bytesToTransfer) {
     int sockfd;
@@ -55,6 +71,9 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
     unsigned int seqNum = 0;
     char buffer[BUFFER_SIZE];
     struct timeval tv;
+
+    // Initialize dynamic array for packets
+    resize_packets_array(); // Ensure we have an initial allocation
 
     // Create UDP socket
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -66,7 +85,7 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
     // Set socket timeout for receiving ACKs
     tv.tv_sec = ACK_TIMEOUT;
     tv.tv_usec = 0;
-    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv)) < 0) {
         perror("Error setting socket timeout");
         close(sockfd);
         exit(EXIT_FAILURE);
@@ -91,10 +110,13 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
     }
 
     while (bytesSent < bytesToTransfer) {
-        // Check if there is data to read and send
-        if (fread(buffer + HEADER_SIZE, 1, DATA_SIZE, file) > 0) {
-            ssize_t packetSize = DATA_SIZE + HEADER_SIZE;
+        ssize_t readBytes = fread(buffer + HEADER_SIZE, 1, DATA_SIZE, file);
+        if (readBytes > 0) {
+            ssize_t packetSize = HEADER_SIZE + readBytes;
             *((unsigned int*)buffer) = htonl(seqNum); // Sequence number in network byte order
+
+            // Call resend_packets to retransmit any packets that have not been ACKed in time
+            resend_packets(sockfd, &receiverAddr);
 
             // Transmit the packet
             if (sendto(sockfd, buffer, packetSize, 0, (struct sockaddr*)&receiverAddr, sizeof(receiverAddr)) < 0) {
@@ -102,39 +124,50 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
                 break;
             }
 
+            // Prepare for tracking the packet
+            resize_packets_array();
+            packets[num_packets].seq_num = seqNum;
+            memcpy(packets[num_packets].data, buffer + HEADER_SIZE, readBytes);
+            packets[num_packets].acked = 0; // Initially not acknowledged
+            packets[num_packets].send_time = time(NULL); // Record the send time
+            num_packets++; // Increment the packet counter
+
             struct ack_packet ack;
             socklen_t fromlen = sizeof(receiverAddr);
 
             // Attempt to receive ACK
-            if (recvfrom(sockfd, &ack, sizeof(ack), 0, (struct sockaddr*)&receiverAddr, &fromlen) < 0) {
-                if (errno == EWOULDBLOCK) {
-                    printf("ACK timeout, need to retransmit\n");
-                    fseek(file, -DATA_SIZE, SEEK_CUR); // Move file pointer back to re-read and re-send the same chunk
-                    continue; // Attempt to resend the packet
-                } else {
-                    perror("recvfrom failed");
+            if (recvfrom(sockfd, &ack, sizeof(ack), 0, (struct sockaddr*)&receiverAddr, &fromlen) >= 0) {
+                ack.seq_num = ntohl(ack.seq_num); // Convert to host byte order
+                for (int i = 0; i < num_packets; i++) {
+                    if (packets[i].seq_num == ack.seq_num) {
+                        packets[i].acked = 1; // Mark as acknowledged
+                        printf("ACK received for packet %u\n", ack.seq_num);
+                        break;
+                    }
+                }
+            } else {
+                if (errno != EWOULDBLOCK) {
+                    perror("Recvfrom failed");
                     break;
                 }
             }
 
-            // Convert ack.seq_num from network byte order to host byte order before comparison
-            ack.seq_num = ntohl(ack.seq_num);
-            if (ack.seq_num == seqNum) {
-                // ACK received correctly, proceed to next packet
-                bytesSent += DATA_SIZE;
-                seqNum++;
-            } else {
-                printf("Received out of order or incorrect ACK, expected: %u, got: %u\n", seqNum, ack.seq_num);
-                fseek(file, -DATA_SIZE, SEEK_CUR); // Move file pointer back for retransmission
-            }
+            bytesSent += readBytes;
+            seqNum++;
         } else {
-            break; // No more data to read/send
+            if (ferror(file)) {
+                perror("Error reading from file");
+                break;
+            }
         }
     }
 
+    // Cleanup
     fclose(file);
     close(sockfd);
+    free(packets); // Free the dynamically allocated packets array at the end
 }
+
 
 
 int main(int argc, char** argv) {
