@@ -16,6 +16,10 @@
 #include <arpa/inet.h>
 #include <fcntl.h> // for opening file
 
+void handle_timeout(){
+    printf("timeout occured");
+}
+
 void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsigned long long int bytesToTransfer) {
     int sockfd;
     struct sockaddr_in receiver_addr;
@@ -27,7 +31,13 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
         perror("socket creation failed");
         exit(EXIT_FAILURE);
     }
-
+    // set timeout
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 1000000; // value to timeout rn
+    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+        perror("Error setting options");
+    }
     memset(&receiver_addr, 0, sizeof(receiver_addr));
 
     // Filling server information
@@ -39,6 +49,7 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
         close(sockfd);
         exit(EXIT_FAILURE);
     }
+
     // Open the file
     file = fopen(filename, "rb");
     if (file == NULL) {
@@ -47,13 +58,6 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
     }
     printf("File opened successfully.\n");
 
-    // set timeout
-    struct timeval tv;
-    tv.tv_sec = 0;
-    tv.tv_usec = 1; // small value to timeout rn
-    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
-        handle_timeout();
-    }
 
     // Read and send the file in chunks
     unsigned long long int bytesSent = 0;
@@ -82,9 +86,6 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
     printf("File and socket closed, exiting.\n");
 }
 
-void handle_timeout(){
-    printf("timeout occured");
-}
 
 int main(int argc, char** argv) {
     if (argc != 5) {
