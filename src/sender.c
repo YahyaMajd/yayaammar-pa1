@@ -19,19 +19,21 @@
 #define DATA_SIZE 508
 
 int packet_size = 0;
-int CWND = 0;
+int CWND_size = 0;
 
 struct packet {
     int seq_num;
     char data[DATA_SIZE];
     int acked;  
+    time_t time_sent;
 };
 
 struct ack_packet {
     int seq_num;
 };
 
-void handle_timeout(){
+void handle_timeout(struct packet* CWND[], int seq_num){
+    
     printf("timeout occured");
 }
 
@@ -88,7 +90,7 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
 
     // CWND calculation
     packet_size = 500;
-    CWND = packet_size / write_rate;
+    CWND_size = packet_size / write_rate;
 
     // send ack
     struct ack_packet ack;
@@ -141,11 +143,11 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
     }
     printf("File opened successfully.\n");
 
-    // establish connection with receiver 
-    // send SYN 
-    // receive ACK with writeRate
-    // set packet size and buffer size
-    
+    // establish connection with receiver
+    size_t SYN_size = 500; 
+    initiate_connection(sockfd, &receiver_addr, SYN_size);
+
+    struct packet CWND[CWND_size];
 
     // Read and send the file in chunks
     unsigned long long int bytesSent = 0;
