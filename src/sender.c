@@ -16,6 +16,93 @@
 #include <arpa/inet.h>
 #include <fcntl.h> // for opening file
 
+#define DATA_SIZE 508
+
+int packet_size = 0;
+int CWND = 0;
+
+struct packet {
+    int seq_num;
+    char data[DATA_SIZE];
+    int acked;  
+};
+
+struct ack_packet {
+    int seq_num;
+}
+
+void handle_timeout(){
+    printf("timeout occured");
+}
+
+/*
+Helper function to send packets
+return true if sent successfully and false if errored
+*/
+// should we create a new buffer everytime or just pass a pointer to a premade buffer?
+int send_packet(struct packet packettosend, int sockfd, struct sockaddr_in receiver_addr, size_t buffer_size){
+    char buffer[buffer_size];
+    memcpy(buffer, &packettosend, sizeof(packettosend));
+    if (sendto(sockfd, buffer, buffer_size, 0, (const struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) < 0) {
+            return 0;
+        }
+    return 1;
+};
+
+// Function to receive a packet
+int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender_addr) {
+    char buffer[sizeof(*packet)]; // Correctly use sizeof(*packet) to get the size of the structure
+    socklen_t addr_len = sizeof(*sender_addr);
+    
+    ssize_t bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0,
+                                     (struct sockaddr*)sender_addr, &addr_len);
+    if (bytesReceived < 0) {
+        perror("recvfrom failed");
+        return 0;
+    }
+
+    memcpy(packet, buffer, sizeof(packet));
+    return 1; // Success
+}
+
+/*
+initiates connection with receiver, returns the packet size and congestion window size to be used
+*/
+int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SYN_size){
+    // send SYN message
+    struct packet SYN; 
+    SYN.seq_num = -1;
+    SYN.acked = 0;
+
+    size_t SYN_size = 5; //is this big enough?
+    if(send_packet(SYN, sockfd, receiver_addr, SYN_size) == 0){
+        perror("Failure to send SYN");
+    }
+
+    // receive packet with writeRate
+    struct packet write_rate_packet;
+    if(receive_packet(sockfd, &write_rate_packet, receiver_addr) == 0){
+        perror("failure receiving write rate");
+    }
+    // deserialize write rate, figure out the congestion window and packet size
+    int write_rate;
+    memcpy(write_rate, write_rate_packet, sizeof(write_rate));
+    packet_size = 500;
+    CWND = packet_size / write_rate;
+
+    // send ack
+    struct ack_packet ack;
+    ack.seq_num = write_rate.seq_num;
+
+    char buffer[packet_size];
+    memcpy(buffer, &ack, sizeof(ack));
+    if (sendto(sockfd, buffer, buffer_size, 0, (const struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) < 0) {
+            perror("failed to send ack");
+        }
+
+}
+
+
 void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsigned long long int bytesToTransfer) {
     int sockfd;
     struct sockaddr_in receiver_addr;
@@ -55,6 +142,12 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
         handle_timeout();
     }
 
+    // establish connection with receiver 
+    // send SYN 
+    // receive ACK with writeRate
+    // set packet size and buffer size
+    
+
     // Read and send the file in chunks
     unsigned long long int bytesSent = 0;
     while (bytesSent < bytesToTransfer && !feof(file)) {
@@ -80,10 +173,6 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
     fclose(file);
     close(sockfd);
     printf("File and socket closed, exiting.\n");
-}
-
-void handle_timeout(){
-    printf("timeout occured");
 }
 
 int main(int argc, char** argv) {
