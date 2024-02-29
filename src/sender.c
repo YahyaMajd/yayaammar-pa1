@@ -47,6 +47,14 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
     }
     printf("File opened successfully.\n");
 
+    // set timeout
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 1; // small value to timeout rn
+    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+        handle_timeout();
+    }
+
     // Read and send the file in chunks
     unsigned long long int bytesSent = 0;
     while (bytesSent < bytesToTransfer && !feof(file)) {
@@ -74,7 +82,9 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
     printf("File and socket closed, exiting.\n");
 }
 
-
+void handle_timeout(){
+    printf("timeout occured");
+}
 
 int main(int argc, char** argv) {
     if (argc != 5) {
