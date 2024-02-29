@@ -9,10 +9,8 @@
 #include <errno.h>
 #include <time.h> // Include this header
 
-#define BUFFER_SIZE 1024
-#define HEADER_SIZE 8
-#define DATA_SIZE (BUFFER_SIZE - HEADER_SIZE)
-#define ACK_TIMEOUT 2  // Timeout in seconds for ACKs
+#define CWND 5 // the size of the congestion window
+#define ACK_TIMEOUT 30
 
 struct packet {
     unsigned int seq_num;
@@ -21,41 +19,46 @@ struct packet {
     time_t send_time;  // Time when the packet was last sent
 };
 
-struct ack_packet {
-    unsigned int seq_num;
-};
+struct buffer packet[CWND]; // buffer with size CWND
+int smallestunacked = 0; // sequence number of the smallest unacked packet
 
-void resend_packets(struct packet packets[], int sockfd, struct sockaddr_in *receiverAddr, int *outstanding_packets) {
-    time_t current_time = time(NULL);
 
-    for (int i = 0; i < *outstanding_packets; i++) {
-        // Check if the packet was not acknowledged and if the resend timeout has passed
-        if (!packets[i].acked && difftime(current_time, packets[i].send_time) > ACK_TIMEOUT) {
-            char buffer[BUFFER_SIZE];
-            *((unsigned int *)buffer) = htonl(packets[i].seq_num);
-            memcpy(buffer + HEADER_SIZE, packets[i].data, DATA_SIZE);
+/* PLAN
+Main requirements:
+- data is reliably transferred even in the case of dropped or out of order packets
+- 70% utilization (cannot just use a send and wait method)
 
-            if (sendto(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)receiverAddr, sizeof(*receiverAddr)) < 0) {
-                perror("Sendto failed during retransmission");
-                continue;  // Try to send next packets
-            }
+Selective repeat method:
+- data from above (from file)
+    - if next avilable seq# in window, send packet
+- timeout(n): resend packet n, restart timer
+- ack(n)
+    - mark packet n as received
+    - if n is smallest unAcked, advance window to next unAcked
 
-            packets[i].send_time = current_time;  // Update send time for the retransmitted packet
-            printf("Packet %u retransmitted.\n", packets[i].seq_num);
-        }
-    }
+On sender need to handle:
+- sending data
+- timeouts
+- getting acks
+
+On receiver need to handle
+- receiving data
+- receiving duplicate packets
+- receiving out of order data
+*/
+
+/*
+Handle timeout
+*/
+void timeout_handler(){
+    // resend the packet
 }
 
-
+/*
+Send packet
+*/
 void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsigned long long int bytesToTransfer) {
-    int sockfd;
-    struct sockaddr_in receiverAddr;
-    FILE *file;
-    unsigned long long int bytesSent = 0;
-    unsigned int seqNum = 0;
-    char buffer[BUFFER_SIZE];
-    struct timeval tv;
-
+    
     // Create UDP socket
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
@@ -64,9 +67,10 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
     }
 
     // Set socket timeout for receiving ACKs
+    struct timeval tv;
     tv.tv_sec = ACK_TIMEOUT;
     tv.tv_usec = 0;
-    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv)) < 0) {
         perror("Error setting socket timeout");
         close(sockfd);
         exit(EXIT_FAILURE);
@@ -90,81 +94,25 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
         exit(EXIT_FAILURE);
     }
 
-    while (bytesSent < bytesToTransfer) {
-        // Check if there is data to read and send
-        if (fread(buffer + HEADER_SIZE, 1, DATA_SIZE, file) > 0) {
-            ssize_t packetSize = DATA_SIZE + HEADER_SIZE;
-            *((unsigned int*)buffer) = htonl(seqNum); // Sequence number in network byte order
+    unsigned long long int bytesSent = 0;
+    while(bytesSent < bytesToTransfer){
+        // create packet
+        // add to buffer
+        // send data 
+         
+        // when buffer is full
+        // wait for ack/timeout
 
-            // Transmit the packet
-            if (sendto(sockfd, buffer, packetSize, 0, (struct sockaddr*)&receiverAddr, sizeof(receiverAddr)) < 0) {
-                perror("Sendto failed");
-                break;
-            }
-
-            /*
-            NOTE: here we're doing a send and wait mechanism, but isn't that ineffective/not what we're looking for.
-            Also for out of order acks does resetting the file pointer not just mean we're gonna be resending 
-            anything after that point?
-            Also also, shouldn't out of order packets be handled by the receiver?
-            */
-
-            struct ack_packet ack;
-            socklen_t fromlen = sizeof(receiverAddr);
-
-            // Attempt to receive ACK
-            if (recvfrom(sockfd, &ack, sizeof(ack), 0, (struct sockaddr*)&receiverAddr, &fromlen) < 0) {
-                if (errno == EWOULDBLOCK) {
-                    printf("ACK timeout, need to retransmit\n");
-                    fseek(file, -DATA_SIZE, SEEK_CUR); // Move file pointer back to re-read and re-send the same chunk
-                    continue; // Attempt to resend the packet
-                } else {
-                    perror("recvfrom failed");
-                    break;
-                }
-            }
-
-            // Convert ack.seq_num from network byte order to host byte order before comparison
-            ack.seq_num = ntohl(ack.seq_num);
-            if (ack.seq_num == seqNum) {
-                // ACK received correctly, proceed to next packet
-                bytesSent += DATA_SIZE;
-                seqNum++;
-            } else {
-                printf("Received out of order or incorrect ACK, expected: %u, got: %u\n", seqNum, ack.seq_num);
-                fseek(file, -DATA_SIZE, SEEK_CUR); // Move file pointer back for retransmission
-            }
-        } else {
-            break; // No more data to read/send
-        }
+        // if first message sent is acked, send new message then redo
+        // if timeout, resend first message then redo
+            // if this happens should also check if messages further in the buffer have timed out as well
     }
 
+    // Cleanup
     fclose(file);
     close(sockfd);
+    free(packets); // Free the dynamically allocated packets array at the end
 }
-
-
-/* PLAN
-Main requirements:
-- data is reliably transferred even in the case of dropped or out of order packets
-- 70% utilization (cannot just use a send and wait method)
-
-Selective repeat method:
-- data from above (from file)
-    - if next avilable seq# in window, send packet
-- timeout(n): resend packet n, restart timer
-- ack(n)
-    - mark packet n as received
-    - if n is smallest unAcked, advance window to next unAcked
-*/
-
-/*
-Handle timeout
-*/
-
-/*
-Send packet
-*/
 
 int main(int argc, char** argv) {
     // This is a skeleton of a main function.
