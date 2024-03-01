@@ -16,12 +16,14 @@
 #include <fcntl.h> // for opening file
 
 #define DATA_SIZE 508
+#define BUFFER_SIZE 520
 
 int packet_size = 0;
 int CWND_size = 0;
 int pack_num = -1;
 struct packet {
     int seq_num;
+    int data_len;
     char data[DATA_SIZE];
     int acked;  
     //time_t time_sent; // gonna need to adjust sizes!!!
@@ -31,8 +33,19 @@ struct ack_packet {
     int seq_num;
 };
 
-void handle_timeout(struct packet* CWND[], int seq_num){
+void handle_timeout(struct packet* CWND[], int sockfd, struct sockaddr_in receiver_addr){
     printf("timeout occured");
+    for(size_t i = 0; i < CWND_size; i++){
+        // check if packet in window is acked, otherwise resend
+        if(CWND[i]->acked == 0){
+            if(send_packet(*CWND[i], sockfd, receiver_addr, BUFFER_SIZE) == 0){
+                printf("on packet %d", CWND[i]->seq_num);
+                perror(" error resending packet");
+            } else {
+                printf("resent packet %d", CWND[i]->seq_num);
+            }
+        }
+    }
 }
 
 /*
@@ -40,10 +53,10 @@ Helper function to send packets
 return true if sent successfully and false if errored
 */
 // should we create a new buffer everytime or just pass a pointer to a premade buffer?
-int send_packet(struct packet packettosend, int sockfd, struct sockaddr_in receiver_addr, size_t buffer_size){
-    char buffer[buffer_size];
+int send_packet(struct packet packettosend, int sockfd, struct sockaddr_in receiver_addr, size_t packet_size){
+    char buffer[packet_size];
     memcpy(buffer, &packettosend, sizeof(packettosend));
-    if (sendto(sockfd, buffer, buffer_size, 0, (const struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) < 0) {
+    if (sendto(sockfd, buffer, BUFFER_SIZE, 0, (const struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) < 0) {
             return 0;
         }
     return 1;
@@ -73,6 +86,7 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
     struct packet SYN; 
     SYN.seq_num = pack_num;
     SYN.acked = 0;
+    SYN.data_len = SYN_size;
     
     // advance global sequence number 
     pack_num++;
@@ -121,7 +135,7 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
 void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsigned long long int bytesToTransfer) {
     int sockfd;
     struct sockaddr_in receiver_addr;
-    char buffer[508];
+    char buffer[DATA_SIZE];
     FILE *file;
 
     // Create socket
@@ -170,13 +184,14 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
         if (bytesToTransfer - bytesSent < toRead) {
             toRead = bytesToTransfer - bytesSent;
         }
-        size_t read = fread(buffer, 1, toRead, file);
+        size_t read = fread(buffer, 1, toRead, file); // need to make sure that we don't reach end of file
         struct packet send_pkt;
         send_pkt.seq_num  = pack_num;
         printf("packet num : %d\n", pack_num);
         //printf("packet itlef num: %d\n", send_pkt.seq_num);
         memcpy(&send_pkt.data,buffer,sizeof(buffer));
-        if (send_packet(send_pkt,sockfd,receiver_addr,528) == 0) {
+        send_pkt.data_len = read;
+        if (send_packet(send_pkt,sockfd,receiver_addr,BUFFER_SIZE) == 0) {
             printf("rsend failed \n");
             break;
         }
@@ -194,7 +209,7 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
             } else{
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
                     // Timeout detected
-                    handle_timeout(CWND,send_pkt.seq_num);
+                    handle_timeout(&CWND, sockfd, receiver_addr);
                 } else{
                     perror("recvfrom failed");
                 }
