@@ -52,7 +52,7 @@ int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender
     char buffer[sizeof(*packet)]; // Correctly use sizeof(*packet) to get the size of the structure
     socklen_t addr_len = sizeof(*sender_addr);
      *bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)sender_addr, &addr_len);
-    if (bytesReceived < 0){
+    if (*bytesReceived < 0){
         perror("recvfrom failed in receiver packets");
         return 0;
     }
