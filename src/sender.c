@@ -25,7 +25,7 @@ struct packet {
     int seq_num;
     char data[DATA_SIZE];
     int acked;  
-    time_t time_sent;
+    //time_t time_sent; // gonna need to adjust sizes!!!
 };
 
 struct ack_packet {
@@ -95,7 +95,7 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
     int write_rate = atoi(write_rate_packet.data);
     printf("%d\n", write_rate);
     // CWND calculation
-    packet_size = 508;
+    packet_size = 516; // 508 data plus two ints
     // CWND_size = packet_size / write_rate;
 
     // send ack
@@ -118,7 +118,7 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
 void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsigned long long int bytesToTransfer) {
     int sockfd;
     struct sockaddr_in receiver_addr;
-    char buffer[1024];
+    char buffer[516];
     FILE *file;
 
     // Create socket
@@ -154,10 +154,10 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
     printf("File opened successfully.\n");
 
     // establish connection with receiver
-    size_t SYN_size = 500; 
+    size_t SYN_size = 516; 
     initiate_connection(sockfd, &receiver_addr, SYN_size);
 
-    sleep(15);
+   //sleep(15);
     //struct packet CWND[CWND_size];
 
     // Read and send the file in chunks
@@ -168,9 +168,10 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
             toRead = bytesToTransfer - bytesSent;
         }
         size_t read = fread(buffer, 1, toRead, file);
-
-        if (sendto(sockfd, buffer, read, 0, (const struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) < 0) {
-            perror("sendto failed");
+        struct packet send_pkt;
+        memcpy(&send_pkt,buffer,sizeof(buffer));
+        if (send_packet(send_pkt,sockfd,receiver_addr,528) == 0) {
+            printf("rsend failed \n");
             break;
         }
         bytesSent += read;

@@ -57,15 +57,23 @@ int send_packet(struct packet packettosend, int sockfd, struct sockaddr_in recei
 };
 
 // Function to receive a packet
-int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender_addr) {
+int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender_addr, ssize_t *bytesReceived) {
     char buffer[sizeof(*packet)]; // Correctly use sizeof(*packet) to get the size of the structure
     socklen_t addr_len = sizeof(*sender_addr);
-    ssize_t bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)sender_addr, &addr_len);
+     *bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)sender_addr, &addr_len);
     if (bytesReceived < 0){
         perror("recvfrom failed in receiver packets");
         return 0;
     }
-  
+    
+    printf("Received %zd bytes\n", *bytesReceived); // Print the number of received bytes
+    // Optionally print the sender's IP address
+    char senderIP[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET,(const void *)&sender_addr->sin_addr, senderIP, sizeof(senderIP));
+    printf("From %s\n", senderIP);
+
+    // If the data is expected to be text, print the received text (ensure it's null-terminated)
+    buffer[*bytesReceived - 20] = '\0'; // Make sure there's no buffer overflow here
     memcpy(packet, buffer, sizeof(*packet));
     return 1; // Success
 }
@@ -157,36 +165,26 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
     }
 
     struct sockaddr_in sender_addr;
-    socklen_t addr_len = sizeof(sender_addr); // Correct type for len
-    int n;
+    ssize_t bytesReceived;
     while ( 1) {
         struct packet curr_packet;
-       // receive_packet(sockfd,&curr_packet,&sender_addr);
-       if((n = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *) &sender_addr, &addr_len)) > 0){
-            memcpy(&curr_packet,buffer,sizeof(buffer));
-            // handshake check
-            if(curr_packet.seq_num == - 1){
-                initiate_connection(sockfd,  writeRate, &sender_addr);
+        receive_packet(sockfd,&curr_packet,&sender_addr,&bytesReceived);
+     
+        // handshake check
+        if(curr_packet.seq_num == - 1){
+            initiate_connection(sockfd,  writeRate, &sender_addr);
+        }
+        else{
+            memcpy(buffer,&curr_packet,sizeof(buffer));
+            printf("Received packet contains: \"%s\"\n", buffer);
+            // Example adjustment for writing to the file
+            if (fwrite(curr_packet.data, 1, 508, file) != (508)) {
+                perror("Failed to write to file");
+                break; // Handle the write error
             }
-            else{
-                printf("Received %d bytes\n", n);    
-                // printf("Received %d bytes\n", n); // Print the number of received bytes
-                // Optionally print the sender's IP address
-                char senderIP[INET_ADDRSTRLEN];
-                inet_ntop(AF_INET, &sender_addr.sin_addr, senderIP, sizeof(senderIP));
-                printf("From %s\n", senderIP);
-
-                // If the data is expected to be text, print the received text (ensure it's null-terminated)
-                //buffer[n] = '\0'; // Make sure there's no buffer overflow here
-                printf("Received packet contains: \"%s\"\n", buffer);
-
-                if (fwrite(buffer, 1, n, file) != n) {
-                    perror("Failed to write to file");
-                    break; // Handle write error
-                }
-                fflush(file); 
-            }    
-        }     
+            fflush(file); 
+        }    
+        //}     
     }
 
 
