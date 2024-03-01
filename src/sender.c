@@ -33,7 +33,6 @@ struct ack_packet {
 };
 
 void handle_timeout(struct packet* CWND[], int seq_num){
-    
     printf("timeout occured");
 }
 
@@ -96,29 +95,23 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
     int write_rate = atoi(write_rate_packet.data);
     printf("%d\n", write_rate);
     // CWND calculation
-    packet_size = 500;
+    packet_size = 508;
     // CWND_size = packet_size / write_rate;
 
     // send ack
     struct ack_packet ack;
     ack.seq_num = write_rate_packet.seq_num;
 
-    char buffer[packet_size];
+    char buffer[sizeof(struct ack_packet)];
     memcpy(buffer, &ack, sizeof(ack));
     
-    int optval;
-    socklen_t optlen = sizeof(optval);
-    if (getsockopt(sockfd, SOL_SOCKET, SO_TYPE, &optval, &optlen) == -1) {
-        perror("getsockopt failed, sockfd might be invalid");
-    } else {
-        if (sendto(sockfd, buffer, packet_size, 0, (const struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) < 0) {
-            perror("failed to send ack");
-        }
-        else{
-            printf("sent ack\nexiting initiate connection\n");
-        }
-    }   
-
+    if (sendto(sockfd, buffer, packet_size, 0, (const struct sockaddr *) receiver_addr, sizeof(*receiver_addr)) < 0) {
+        perror("failed to send ack");
+    }
+    else{
+        printf("sent ack\nexiting initiate connection\n");
+    }
+    return 1;
 }
 
 
@@ -164,6 +157,7 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
     size_t SYN_size = 500; 
     initiate_connection(sockfd, &receiver_addr, SYN_size);
 
+    sleep(15);
     //struct packet CWND[CWND_size];
 
     // Read and send the file in chunks
@@ -174,6 +168,7 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
             toRead = bytesToTransfer - bytesSent;
         }
         size_t read = fread(buffer, 1, toRead, file);
+
         if (sendto(sockfd, buffer, read, 0, (const struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) < 0) {
             perror("sendto failed");
             break;

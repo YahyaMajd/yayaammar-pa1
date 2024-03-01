@@ -62,7 +62,7 @@ int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender
     socklen_t addr_len = sizeof(*sender_addr);
     ssize_t bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)sender_addr, &addr_len);
     if (bytesReceived < 0){
-        perror("recvfrom failed");
+        perror("recvfrom failed in receiver packets");
         return 0;
     }
   
@@ -72,7 +72,7 @@ int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender
 
 
 int initiate_connection(int sockfd, int writeRate, struct sockaddr_in *sender_addr){
-    struct packet SYN;
+   // struct packet SYN;
 
     // set timeout
     struct timeval tv;
@@ -103,8 +103,13 @@ int initiate_connection(int sockfd, int writeRate, struct sockaddr_in *sender_ad
 
         //// TIMEOUT CHECK /////////////////
         if (bytesReceived >= 0) {
-            printf("received ack\n");
-            return 1;
+            struct ack_packet received;
+            memcpy(&received,buffer,sizeof(buffer));
+            if(received.seq_num == -1){
+                printf("received ack\n");
+                return 1;
+            }     
+            
         }
         else{
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -125,7 +130,7 @@ int initiate_connection(int sockfd, int writeRate, struct sockaddr_in *sender_ad
 void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long long int writeRate) {
     int sockfd;
     struct sockaddr_in my_addr;
-    char buffer[1024];
+    char buffer[516];
     FILE *file;
 
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -156,29 +161,32 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
     int n;
     while ( 1) {
         struct packet curr_packet;
+       // receive_packet(sockfd,&curr_packet,&sender_addr);
+       if((n = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *) &sender_addr, &addr_len)) > 0){
+            memcpy(&curr_packet,buffer,sizeof(buffer));
+            // handshake check
+            if(curr_packet.seq_num == - 1){
+                initiate_connection(sockfd,  writeRate, &sender_addr);
+            }
+            else{
+                printf("Received %d bytes\n", n);    
+                // printf("Received %d bytes\n", n); // Print the number of received bytes
+                // Optionally print the sender's IP address
+                char senderIP[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &sender_addr.sin_addr, senderIP, sizeof(senderIP));
+                printf("From %s\n", senderIP);
 
-        receive_packet(sockfd,&curr_packet,&sender_addr);
+                // If the data is expected to be text, print the received text (ensure it's null-terminated)
+                //buffer[n] = '\0'; // Make sure there's no buffer overflow here
+                printf("Received packet contains: \"%s\"\n", buffer);
 
-        // handshake check
-        if(curr_packet.seq_num == - 1){
-            initiate_connection( sockfd,  writeRate, &sender_addr);
-        }
-
-        printf("Received %d bytes\n", n); // Print the number of received bytes
-        // Optionally print the sender's IP address
-        char senderIP[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &sender_addr.sin_addr, senderIP, sizeof(senderIP));
-        printf("From %s\n", senderIP);
-
-        // If the data is expected to be text, print the received text (ensure it's null-terminated)
-        buffer[n] = '\0'; // Make sure there's no buffer overflow here
-        printf("Received packet contains: \"%s\"\n", buffer);
-
-        if (fwrite(buffer, 1, n, file) != n) {
-            perror("Failed to write to file");
-            break; // Handle write error
-        }
-        fflush(file); 
+                if (fwrite(buffer, 1, n, file) != n) {
+                    perror("Failed to write to file");
+                    break; // Handle write error
+                }
+                fflush(file); 
+            }    
+        }     
     }
 
 
