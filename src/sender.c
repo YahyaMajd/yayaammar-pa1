@@ -96,17 +96,14 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
     int write_rate = atoi(write_rate_packet.data);
     printf("%d", write_rate);
     // CWND calculation
-  //  packet_size = 500;
-   // CWND_size = packet_size / write_rate;
+   packet_size = 500;
+   CWND_size = packet_size / write_rate;
 
     // send ack
-    struct ack_packet ack;
+    struct packet ack;
     ack.seq_num = write_rate_packet.seq_num;
-
-    char buffer[packet_size];
-    memcpy(buffer, &ack, sizeof(ack));
     
-    if (sendto(sockfd, buffer, packet_size, 0, (const struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) < 0) {
+    if (send_packet(ack, sockfd, *receiver_addr, packet_size) == 0) {
             perror("failed to send ack");
         }
 
