@@ -77,13 +77,13 @@ int initiate_connection(int sockfd, int writeRate){
 
     // set timeout
     struct timeval tv;
-    tv.tv_sec = 0;
-    tv.tv_usec = 1000000; // value to timeout rn
+    tv.tv_sec = 10;
+    tv.tv_usec = 0; // value to timeout rn
     if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
         perror("Error setting options");
     }
 
-    if (receive_packet(sockfd, &SYN, &sender_addr) == 0 && SYN.seq_num == 0) {
+    if (receive_packet(sockfd, &SYN, &sender_addr) == 0 && SYN.seq_num == -1) {
         printf("Received handshake initiation.\n");
 
         struct packet SYN_ACK;
@@ -96,7 +96,11 @@ int initiate_connection(int sockfd, int writeRate){
             if(send_packet(SYN_ACK, sockfd, sender_addr, 500)){
                 perror("failure to send write rate");
             }
-            ssize_t bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)sender_addr, &addr_len);
+            char buffer[sizeof(SYN_ACK)];
+
+            socklen_t addr_len = sizeof(sender_addr); // Correct type and initialization for address length
+
+            ssize_t bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&sender_addr, &addr_len);
             //// TIMEOUT CHECK /////////////////
         
             if (bytesReceived >= 0) {
@@ -150,7 +154,7 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
     socklen_t addr_len = sizeof(sender_addr); // Correct type for len
     int n;
 
-
+    initiate_connection(sockfd, writeRate);
     while ((n = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *) &sender_addr, &addr_len)) > 0) {
         printf("Received %d bytes\n", n); // Print the number of received bytes
         // Optionally print the sender's IP address

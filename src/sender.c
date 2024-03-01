@@ -118,8 +118,8 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
     }
     // set timeout
     struct timeval tv;
-    tv.tv_sec = 0;
-    tv.tv_usec = 1000000; // value to timeout rn
+    tv.tv_sec = 10;
+    tv.tv_usec =0; // value to timeout rn
     if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
         perror("Error setting options");
     }
