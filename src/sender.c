@@ -83,8 +83,11 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
     // receive packet with writeRate
     struct packet write_rate_packet;
     while(1){
-        if(receive_packet(sockfd, &write_rate_packet, receiver_addr) == 0){
+        if(receive_packet(sockfd, &write_rate_packet, (struct sockaddr_in *)&receiver_addr) == 0){
             perror("failure receiving write rate");
+        } else {
+            printf("received write rate\n");
+            break;  
         }
     }
     
@@ -102,6 +105,7 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
 
     char buffer[packet_size];
     memcpy(buffer, &ack, sizeof(ack));
+    
     if (sendto(sockfd, buffer, packet_size, 0, (const struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) < 0) {
             perror("failed to send ack");
         }
