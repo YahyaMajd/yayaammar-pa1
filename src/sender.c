@@ -83,7 +83,7 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
     // receive packet with writeRate
     struct packet write_rate_packet;
     while(1){
-        if(receive_packet(sockfd, &write_rate_packet, (struct sockaddr_in *)&receiver_addr) == 0){
+        if(receive_packet(sockfd, &write_rate_packet, receiver_addr) == 0){
             perror("failure receiving write rate");
         } else {
             printf("received write rate\n");
@@ -94,18 +94,30 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
     // deserialize write rate, figure out the congestion window and packet size
     
     int write_rate = atoi(write_rate_packet.data);
-    printf("%d", write_rate);
+    printf("%d\n", write_rate);
     // CWND calculation
-   packet_size = 500;
-   CWND_size = packet_size / write_rate;
+    packet_size = 500;
+    // CWND_size = packet_size / write_rate;
 
     // send ack
-    struct packet ack;
+    struct ack_packet ack;
     ack.seq_num = write_rate_packet.seq_num;
+
+    char buffer[packet_size];
+    memcpy(buffer, &ack, sizeof(ack));
     
-    if (send_packet(ack, sockfd, *receiver_addr, packet_size) == 0) {
+    int optval;
+    socklen_t optlen = sizeof(optval);
+    if (getsockopt(sockfd, SOL_SOCKET, SO_TYPE, &optval, &optlen) == -1) {
+        perror("getsockopt failed, sockfd might be invalid");
+    } else {
+        if (sendto(sockfd, buffer, packet_size, 0, (const struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) < 0) {
             perror("failed to send ack");
         }
+        else{
+            printf("sent ack\nexiting initiate connection\n");
+        }
+    }   
 
 }
 

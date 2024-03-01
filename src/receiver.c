@@ -71,7 +71,7 @@ int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender
 }
 
 
-int initiate_connection(int sockfd, int writeRate, struct sockaddr_in sender_addr){
+int initiate_connection(int sockfd, int writeRate, struct sockaddr_in *sender_addr){
     struct packet SYN;
 
     // set timeout
@@ -91,7 +91,7 @@ int initiate_connection(int sockfd, int writeRate, struct sockaddr_in sender_add
     
     while(1){
         // check size (last argument)
-        if(send_packet(SYN_ACK, sockfd, sender_addr, 500) == 0){
+        if(send_packet(SYN_ACK, sockfd, *sender_addr, 500) == 0){
             perror("failure to send write rate");
         } else{
             printf("sent write rate succesfully\n");
@@ -100,7 +100,7 @@ int initiate_connection(int sockfd, int writeRate, struct sockaddr_in sender_add
 
         socklen_t addr_len = sizeof(sender_addr); // Correct type and initialization for address length
 
-        ssize_t bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&sender_addr, &addr_len);
+        ssize_t bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)sender_addr, &addr_len);
         //// TIMEOUT CHECK /////////////////
     
         if (bytesReceived >= 0) {
@@ -128,11 +128,12 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
     char buffer[1024];
     FILE *file;
 
-    // Creating socket file descriptor
-    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd == -1) {
         perror("socket creation failed");
         exit(EXIT_FAILURE);
     }
+
 
     memset(&my_addr, 0, sizeof(my_addr));
     my_addr.sin_family = AF_INET;
@@ -160,7 +161,7 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
 
         // handshake check
         if(curr_packet.seq_num == - 1){
-            initiate_connection( sockfd,  writeRate, sender_addr);
+            initiate_connection( sockfd,  writeRate, &sender_addr);
         }
 
         printf("Received %d bytes\n", n); // Print the number of received bytes
@@ -195,7 +196,7 @@ int main(int argc, char** argv) {
 
     unsigned short int myUDPport = (unsigned short int)atoi(argv[1]);
     char* destinationFile = argv[2];
-    unsigned long long int writeRate = 0; // Placeholder, adjust as needed
+    unsigned long long int writeRate = 10; // Placeholder, adjust as needed
 
     rrecv(myUDPport, destinationFile, writeRate);
 
