@@ -82,15 +82,19 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
 
     // receive packet with writeRate
     struct packet write_rate_packet;
-    if(receive_packet(sockfd, &write_rate_packet, receiver_addr) == 0){
-        perror("failure receiving write rate");
+    while(1){
+        if(receive_packet(sockfd, &write_rate_packet, receiver_addr) == 0){
+            perror("failure receiving write rate");
+        }
     }
+    
     // deserialize write rate, figure out the congestion window and packet size
+    
     int write_rate = atoi(write_rate_packet.data);
-
+    printf("%d", write_rate);
     // CWND calculation
-    packet_size = 500;
-    CWND_size = packet_size / write_rate;
+  //  packet_size = 500;
+   // CWND_size = packet_size / write_rate;
 
     // send ack
     struct ack_packet ack;
@@ -147,7 +151,7 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
     size_t SYN_size = 500; 
     initiate_connection(sockfd, &receiver_addr, SYN_size);
 
-    struct packet CWND[CWND_size];
+    //struct packet CWND[CWND_size];
 
     // Read and send the file in chunks
     unsigned long long int bytesSent = 0;
