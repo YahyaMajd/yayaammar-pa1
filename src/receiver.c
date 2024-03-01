@@ -130,7 +130,6 @@ int initiate_connection(int sockfd, int writeRate, struct sockaddr_in *sender_ad
         }
     }
 
-    printf("Exiting\n");
     return 0; 
 }
 
@@ -175,10 +174,10 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
             initiate_connection(sockfd,  writeRate, &sender_addr);
         }
         else{
-            printf("sending acknowledgment\n");
             // acknowledge packet
             struct ack_packet ack;
             ack.seq_num = curr_packet.seq_num;
+            printf("sending acknowledgment: %d\n", curr_packet.seq_num );
             char buffer[sizeof(struct ack_packet)];
             memcpy(buffer, &ack, sizeof(ack));
             if (sendto(sockfd, buffer, sizeof(struct ack_packet), 0, (const struct sockaddr *) &sender_addr, sizeof(sender_addr)) < 0) {
