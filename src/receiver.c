@@ -182,8 +182,8 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
     while ( 1) {
         struct packet curr_packet;
         printf("receiving.....\n");
-        receive_packet(sockfd,&curr_packet,&sender_addr,&bytesReceived);
-
+        if(receive_packet(sockfd,&curr_packet,&sender_addr,&bytesReceived) == 0) continue;
+        
         // handshake check
         if(curr_packet.seq_num == - 1){
             printf("handshake....\n");
