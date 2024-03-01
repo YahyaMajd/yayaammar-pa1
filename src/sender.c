@@ -174,7 +174,7 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
         struct packet send_pkt;
         send_pkt.seq_num  = pack_num;
         printf("packet num : %d\n", pack_num);
-        printf("packet itslef num: %d\n", send_pkt.seq_num);
+        //printf("packet itlef num: %d\n", send_pkt.seq_num);
         memcpy(&send_pkt.data,buffer,sizeof(buffer));
         if (send_packet(send_pkt,sockfd,receiver_addr,528) == 0) {
             printf("rsend failed \n");

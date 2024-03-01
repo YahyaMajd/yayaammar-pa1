@@ -46,16 +46,6 @@ struct ack_packet {
     int seq_num;
 };
 
-// Function to send packet
-int send_packet(struct packet packettosend, int sockfd, struct sockaddr_in receiver_addr, size_t buffer_size){
-    char buffer[buffer_size];
-    memcpy(buffer, &packettosend, sizeof(packettosend));
-    if (sendto(sockfd, buffer, buffer_size, 0, (const struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) < 0) {
-            return 0;
-        }
-    return 1;
-};
-
 // Function to receive a packet
 int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender_addr, ssize_t *bytesReceived) {
     char buffer[sizeof(*packet)]; // Correctly use sizeof(*packet) to get the size of the structure
@@ -78,6 +68,29 @@ int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender
     return 1; // Success
 }
 
+// Function to send packet
+int send_packet(struct packet packettosend, int sockfd, struct sockaddr_in receiver_addr, size_t buffer_size){
+    char buffer[buffer_size];
+    memcpy(buffer, &packettosend, sizeof(packettosend));
+    if (sendto(sockfd, buffer, buffer_size, 0, (const struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) < 0) {
+            return 0;
+        }
+    return 1;
+};
+
+
+int send_ack(int sockfd, struct sockaddr_in receiver_addr , int seq){
+    struct ack_packet ack;
+    ack.seq_num = seq;
+    printf("sending acknowledgment: %d\n", seq );
+    char buffer[sizeof(struct ack_packet)];
+    memcpy(buffer, &ack, sizeof(ack));
+    if (sendto(sockfd, buffer, sizeof(struct ack_packet), 0, (const struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) < 0) {
+        perror("failed to send ack ");
+        return 0;
+    }
+    return 1;
+}
 
 int initiate_connection(int sockfd, int writeRate, struct sockaddr_in *sender_addr){
    // struct packet SYN;
@@ -137,7 +150,7 @@ int initiate_connection(int sockfd, int writeRate, struct sockaddr_in *sender_ad
 void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long long int writeRate) {
     int sockfd;
     struct sockaddr_in my_addr;
-    char buffer[516];
+    char buffer[508];
     FILE *file;
 
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -177,24 +190,19 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
         }
         else{
             // acknowledge packet
-            struct ack_packet ack;
-            ack.seq_num = curr_packet.seq_num;
-            printf("sending acknowledgment: %d\n", curr_packet.seq_num );
-            char buffer[sizeof(struct ack_packet)];
-            memcpy(buffer, &ack, sizeof(ack));
-            if (sendto(sockfd, buffer, sizeof(struct ack_packet), 0, (const struct sockaddr *) &sender_addr, sizeof(sender_addr)) < 0) {
-                perror("failed to send ack ");
+            if(!send_ack(sockfd,sender_addr,curr_packet.seq_num)){
+                printf("failed to send ack\n");
             }
-
-            // write packet contents to target file
-            memcpy(buffer,&curr_packet,sizeof(buffer));
-            printf("Received packet contains: \"%s\"\n", buffer);
+            // Directly writing packet data to the file
+            //printf("Received packet contains: \"%s\"\n", curr_packet.data);
+            memcpy(buffer,&curr_packet.data,sizeof(curr_packet.data));
+             printf("Received packet contains: \"%s\"\n", buffer);
             // Example adjustment for writing to the file
-            if (fwrite(curr_packet.data, 1, 508, file) != (508)) {
+            if (fwrite(buffer, 1, 508, file) != (508)) {
                 perror("Failed to write to file");
                 break; // Handle the write error
             }
-            fflush(file); 
+            fflush(file);
         }        
     }
 
