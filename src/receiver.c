@@ -96,14 +96,14 @@ int initiate_connection(int sockfd, int writeRate, struct sockaddr_in *sender_ad
         } else{
             printf("sent write rate succesfully\n");
         }
-        char buffer[sizeof(SYN_ACK)];
 
-        socklen_t addr_len = sizeof(sender_addr); // Correct type and initialization for address length
-
+        char buffer[sizeof(struct ack_packet)];
+        socklen_t addr_len = sizeof(*sender_addr);
         ssize_t bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)sender_addr, &addr_len);
+
         //// TIMEOUT CHECK /////////////////
-    
         if (bytesReceived >= 0) {
+            printf("received ack\n");
             return 1;
         }
         else{
