@@ -170,7 +170,7 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
         receive_packet(sockfd,&curr_packet,&sender_addr,&bytesReceived);
 
         // handshake check
-        if(curr_packet.seq_num == - 1){
+        if(curr_packet.seq_num == -1){
             initiate_connection(sockfd,  writeRate, &sender_addr);
         }
         else{

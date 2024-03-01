@@ -31,8 +31,19 @@ struct ack_packet {
     int seq_num;
 };
 
-void handle_timeout(struct packet* CWND[], int seq_num){
+void handle_timeout(struct packet* CWND[], int sockfd, struct sockaddr_in receiver_addr, size_t buffer_size){
     printf("timeout occured");
+    for(size_t i = 0; i < CWND_size; i++){
+        // check if packet in window is acked, otherwise resend
+        if(CWND[i]->acked == 0){
+            if(send_packet(*CWND[i], sockfd, receiver_addr, buffer_size) == 0){
+                printf("on packet %d", CWND[i]->seq_num);
+                perror(" error resending packet");
+            } else {
+                printf("resent packet %d", CWND[i]->seq_num);
+            }
+        }
+    }
 }
 
 /*
@@ -192,7 +203,7 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
             } else{
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
                     // Timeout detected
-                    handle_timeout(CWND,send_pkt.seq_num);
+                    handle_timeout(&CWND, sockfd, receiver_addr, 528);
                 } else{
                     perror("recvfrom failed");
                 }
