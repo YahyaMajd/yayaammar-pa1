@@ -199,7 +199,7 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
             memcpy(buffer,&curr_packet.data,sizeof(curr_packet.data));
              printf("Received packet contains: \"%s\"\n", buffer);
             // Example adjustment for writing to the file
-            if (fwrite(buffer, 1, curr_packet.data_len, file) != (508)) {
+            if (fwrite(buffer, 1, curr_packet.data_len, file) != (curr_packet.data_len)) {
                 perror("Failed to write to file");
                 break; // Handle the write error
             }

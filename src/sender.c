@@ -33,20 +33,7 @@ struct ack_packet {
     int seq_num;
 };
 
-void handle_timeout(struct packet* CWND[], int sockfd, struct sockaddr_in receiver_addr){
-    printf("timeout occured");
-    for(size_t i = 0; i < CWND_size; i++){
-        // check if packet in window is acked, otherwise resend
-        if(CWND[i]->acked == 0){
-            if(send_packet(*CWND[i], sockfd, receiver_addr, BUFFER_SIZE) == 0){
-                printf("on packet %d", CWND[i]->seq_num);
-                perror(" error resending packet");
-            } else {
-                printf("resent packet %d", CWND[i]->seq_num);
-            }
-        }
-    }
-}
+
 
 /*
 Helper function to send packets
@@ -61,6 +48,22 @@ int send_packet(struct packet packettosend, int sockfd, struct sockaddr_in recei
         }
     return 1;
 };
+
+/* timeout handler  */
+void handle_timeout(struct packet* CWND[], int sockfd, struct sockaddr_in receiver_addr){
+    printf("timeout occured");
+    for(size_t i = 0; i < CWND_size; i++){
+        // check if packet in window is acked, otherwise resend
+        if(CWND[i]->acked == 0){
+            if(send_packet(*CWND[i], sockfd, receiver_addr, BUFFER_SIZE) == 0){
+                printf("on packet %d", CWND[i]->seq_num);
+                perror(" error resending packet");
+            } else {
+                printf("resent packet %d", CWND[i]->seq_num);
+            }
+        }
+    }
+}
 
 // Function to receive a packet
 int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender_addr) {
