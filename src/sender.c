@@ -190,10 +190,14 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
         size_t read = fread(buffer, 1, toRead, file); // need to make sure that we don't reach end of file
         struct packet send_pkt;
         send_pkt.seq_num  = pack_num;
+        // advance global sequence number 
+        pack_num++;
+
         printf("packet num : %d\n", pack_num);
         //printf("packet itlef num: %d\n", send_pkt.seq_num);
         memcpy(&send_pkt.data,buffer,sizeof(buffer));
         send_pkt.data_len = read;
+
         if (send_packet(send_pkt,sockfd,receiver_addr,BUFFER_SIZE) == 0) {
             printf("rsend failed \n");
             break;
