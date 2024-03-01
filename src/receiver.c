@@ -167,10 +167,12 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
     ssize_t bytesReceived;
     while ( 1) {
         struct packet curr_packet;
+        printf("receiving.....\n");
         receive_packet(sockfd,&curr_packet,&sender_addr,&bytesReceived);
 
         // handshake check
         if(curr_packet.seq_num == - 1){
+            printf("handshake....\n");
             initiate_connection(sockfd,  writeRate, &sender_addr);
         }
         else{
