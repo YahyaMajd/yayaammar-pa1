@@ -20,7 +20,7 @@
 
 int packet_size = 0;
 int CWND_size = 0;
-
+int pack_num = -1;
 struct packet {
     int seq_num;
     char data[DATA_SIZE];
@@ -72,9 +72,13 @@ initiates connection with receiver, returns the packet size and congestion windo
 int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SYN_size){
     // send SYN message
     struct packet SYN; 
-    SYN.seq_num = -1;
+    SYN.seq_num = pack_num;
     SYN.acked = 0;
+    
+    // advance global sequence number 
+    pack_num++;
 
+    // send initiation packet
     if(send_packet(SYN, sockfd, *receiver_addr, SYN_size) == 0){
         perror("Failure to send SYN");
     }
@@ -158,7 +162,7 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
     initiate_connection(sockfd, &receiver_addr, SYN_size);
 
    //sleep(15);
-    //struct packet CWND[CWND_size];
+    struct packet CWND[CWND_size];
 
     // Read and send the file in chunks
     unsigned long long int bytesSent = 0;
@@ -169,15 +173,38 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
         }
         size_t read = fread(buffer, 1, toRead, file);
         struct packet send_pkt;
+        send_pkt.seq_num  = pack_num;   
         memcpy(&send_pkt,buffer,sizeof(buffer));
         if (send_packet(send_pkt,sockfd,receiver_addr,528) == 0) {
             printf("rsend failed \n");
             break;
         }
+
+        // wait for ack trial 
+        char buffer[sizeof(struct ack_packet)];
+        socklen_t addr_len = sizeof(receiver_addr);
+        ssize_t bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)&receiver_addr, &addr_len);
+        //// TIMEOUT CHECK /////////////////
+        if (bytesReceived >= 0) {
+            struct ack_packet received;
+            memcpy(&received,buffer,sizeof(buffer));
+            if(received.seq_num == send_pkt.seq_num){
+                printf("received ack for packet %d : \n", received.seq_num);
+            } else{
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    // Timeout detected
+                    handle_timeout(CWND,send_pkt.seq_num);
+                } else{
+                    perror("recvfrom failed");
+                }
+            }    
+        }
+        // advance read pointer
         bytesSent += read;
         printf("Sent %zu bytes, total sent: %llu bytes.\n", read, bytesSent);
     }
 
+    // specify reason to transmission end
     if (bytesSent >= bytesToTransfer) {
         printf("Specified amount of data sent successfully.\n");
     } else {

@@ -73,7 +73,7 @@ int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender
     printf("From %s\n", senderIP);
 
     // If the data is expected to be text, print the received text (ensure it's null-terminated)
-    buffer[*bytesReceived - 20] = '\0'; // Make sure there's no buffer overflow here
+    buffer[*bytesReceived - 4] = '\0'; // Make sure there's no buffer overflow here
     memcpy(packet, buffer, sizeof(*packet));
     return 1; // Success
 }
@@ -169,12 +169,23 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
     while ( 1) {
         struct packet curr_packet;
         receive_packet(sockfd,&curr_packet,&sender_addr,&bytesReceived);
-     
+
         // handshake check
         if(curr_packet.seq_num == - 1){
             initiate_connection(sockfd,  writeRate, &sender_addr);
         }
         else{
+            printf("sending acknowledgment\n");
+            // acknowledge packet
+            struct ack_packet ack;
+            ack.seq_num = curr_packet.seq_num;
+            char buffer[sizeof(struct ack_packet)];
+            memcpy(buffer, &ack, sizeof(ack));
+            if (sendto(sockfd, buffer, sizeof(struct ack_packet), 0, (const struct sockaddr *) &sender_addr, sizeof(sender_addr)) < 0) {
+                perror("failed to send ack ");
+            }
+
+            // write packet contents to target file
             memcpy(buffer,&curr_packet,sizeof(buffer));
             printf("Received packet contains: \"%s\"\n", buffer);
             // Example adjustment for writing to the file
@@ -183,8 +194,7 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
                 break; // Handle the write error
             }
             fflush(file); 
-        }    
-        //}     
+        }        
     }
 
 
