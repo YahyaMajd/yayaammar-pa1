@@ -38,6 +38,7 @@ void sigint_handler(int sig) {
 
 struct packet {
     int seq_num;
+    int data_len;
     char data[DATA_SIZE];
     int acked;
 };
@@ -198,7 +199,7 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
             memcpy(buffer,&curr_packet.data,sizeof(curr_packet.data));
              printf("Received packet contains: \"%s\"\n", buffer);
             // Example adjustment for writing to the file
-            if (fwrite(buffer, 1, 508, file) != (508)) {
+            if (fwrite(buffer, 1, curr_packet.data_len, file) != (508)) {
                 perror("Failed to write to file");
                 break; // Handle the write error
             }
