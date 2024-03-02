@@ -117,11 +117,16 @@ int write_packet_to_file(struct packet packet, int writeRate){
                 currBuffer[i] = buffer[bytesWritten + i];
             }
             time_t start_time = time(NULL); // curr time
-            if (fwrite(currBuffer, 1, writeRate, file) != (writeRate)) {
+
+            int write_amt = writeRate;
+            if(bytesWritten + writeRate > packet.data_len){
+                write_amt = packet.data_len - bytesWritten;
+            } 
+            if (fwrite(currBuffer, 1, write_amt, file) != (write_amt)) {
                 perror("Failed to write to file");
                 break; // Handle the write error
             }
-            bytesWritten += writeRate;
+            bytesWritten += write_amt;
             fflush(file);
             time_t end_time = time(NULL);
             sleep(difftime(end_time, start_time));
