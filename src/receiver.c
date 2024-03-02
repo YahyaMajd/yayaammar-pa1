@@ -47,6 +47,18 @@ struct ack_packet {
     int seq_num;
 };
 
+int last_received_seq = -1;
+int RWND_idx = 0;
+struct packet RWND[100]; //size is a placeholder 
+
+int compare(const void *a, const void *b) {
+    return ((struct packet*)a)->seq_num - ((struct packet*)b)->seq_num;
+}
+
+void sortArr(struct packet arr[]){
+    qsort(arr, RWND_idx+1, sizeof(struct packet), compare);
+}
+
 // Function to receive a packet
 int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender_addr, ssize_t *bytesReceived) {
     char buffer[sizeof(*packet)]; // Correctly use sizeof(*packet) to get the size of the structure
@@ -235,7 +247,38 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
             if(!send_ack(sockfd,sender_addr,curr_packet.seq_num)){
                 printf("failed to send ack\n");
             }
-            write_packet_to_file(curr_packet, writeRate);
+
+            // make sure we're getting packets in order
+            if(curr_packet.seq_num != last_received_seq + 1){
+                RWND[RWND_idx] = curr_packet;
+                RWND_idx++;
+                sortArr(RWND);
+                continue;
+            } else last_received_seq++;
+            
+            // write to file in order
+            if(RWND_idx == 0){
+                write_packet_to_file(curr_packet, writeRate);
+            } else {
+                write_packet_to_file(curr_packet, writeRate);
+                last_received_seq++;
+
+                for(int i = 0; i < RWND_idx; i++){
+                    // write the stuff in the window in order
+                    if(RWND[i].seq_num == last_received_seq + 1){
+                        write_packet_to_file(RWND[i], writeRate);
+                        last_received_seq++;
+                    } else{
+                        // make sure you bring them back so array starts from 0
+                        int last_index = i;
+                        for(int j = i; j < RWND_idx; j++){
+                            RWND[j - i] = RWND[j];
+                            last_index = j - i;
+                        }
+                        RWND_idx = last_index;
+                    }
+                }
+            }
         }        
     }
 
