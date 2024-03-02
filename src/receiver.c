@@ -99,6 +99,7 @@ Makes sure that we only write at the specified writeRate
 */
 int write_packet_to_file(struct packet packet, int writeRate){
     char buffer[DATA_SIZE];
+    char currBuffer[writeRate];
     memcpy(buffer,&packet.data,sizeof(packet.data));
              printf("Received packet contains: \"%s\"\n", buffer);
     int bytesWritten = 0;
@@ -112,8 +113,11 @@ int write_packet_to_file(struct packet packet, int writeRate){
             bytesWritten = packet.data_len;
             fflush(file);
         } else {
+            for(int i = 0 && i + bytesWritten < packet.data_len; i < writeRate; i++){
+                currBuffer[i] = buffer[bytesWritten + i];
+            }
             time_t start_time = time(NULL); // curr time
-            if (fwrite(buffer+bytesWritten, 1, writeRate, file) != (writeRate)) {
+            if (fwrite(currBuffer, 1, writeRate, file) != (writeRate)) {
                 perror("Failed to write to file");
                 break; // Handle the write error
             }
