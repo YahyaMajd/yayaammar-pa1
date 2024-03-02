@@ -33,8 +33,8 @@ struct ack_packet {
     int seq_num;
 };
 
-int seq[5] = {0,1,3,4,2};
-int idx = 0;
+//int seq[5] = {0,1,3,4,2};
+//int idx = 0;
 /*
 Helper function to send packets
 return true if sent successfully and false if errored
@@ -198,10 +198,10 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
         struct packet send_pkt;
 
         //receiver reordering tests
-       //send_pkt.seq_num  = seq[idx];
-        //idx++;
+        //send_pkt.seq_num  = seq[idx];
+       // idx++;
 
-        send_pkt.seq_num = pack_num;
+        //send_pkt.seq_num = pack_num;
         send_pkt.acked = 0;
 
         printf("packet num : %d\n", pack_num);
@@ -216,7 +216,7 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
 
 
         // update global sequence number and window 
-       // CWND[pack_num] = send_pkt;
+        //CWND[pack_num] = send_pkt;
         pack_num++;
 
         // wait for ack trial 

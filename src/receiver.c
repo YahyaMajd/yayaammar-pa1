@@ -56,7 +56,7 @@ int compare(const void *a, const void *b) {
 }
 
 void sortArr(struct packet arr[]){
-    qsort(arr, RWND_idx+1, sizeof(struct packet), compare);
+    qsort(arr, RWND_idx, sizeof(struct packet), compare);
 }
 
 // Function to receive a packet
@@ -243,7 +243,10 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
         }
         else{
             // acknowledge packet
-            sleep(12);
+
+            // timoeut test
+           // sleep(12);
+
             if(!send_ack(sockfd,sender_addr,curr_packet.seq_num)){
                 printf("failed to send ack\n");
             }
@@ -253,26 +256,27 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
                 RWND[RWND_idx] = curr_packet;
                 RWND_idx++;
                 sortArr(RWND);
-                // for(int i = 0; i < RWND_idx; i++) {
-                //     printf("Packet %d: Seq Num = %d\n", i, RWND[i].seq_num);
-                // }
                 continue;
             } else {
                 last_received_seq++;
             }
             
-            // write to file in order
             if(RWND_idx == 0){
-                printf("writing : %d\n",curr_packet.seq_num);
+                printf("writing in order: %d\n",curr_packet.seq_num);
                 write_packet_to_file(curr_packet, writeRate);
             } else {
+                printf("write : %d\n", curr_packet.seq_num);
                 write_packet_to_file(curr_packet, writeRate);
-                last_received_seq++;
-
+               // last_received_seq++;
+                printf("Last received = %d\n RWND_IDX = %d\n",last_received_seq, RWND_idx);
+                // write to file in order
+                // for(int i = 0; i < RWND_idx; i++) {
+                //         printf("Packet %d: Seq Num = %d\n", i, RWND[i].seq_num);
+                // }
                 for(int i = 0; i < RWND_idx; i++){
                     // write the stuff in the window in order
                     if(RWND[i].seq_num == last_received_seq + 1){
-                        printf("writing : %d\n",curr_packet.seq_num);
+                        printf("writing out of order: %d\n",curr_packet.seq_num);
                         write_packet_to_file(RWND[i], writeRate);
                         last_received_seq++;
                     } else{
