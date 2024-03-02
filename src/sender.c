@@ -21,6 +21,7 @@
 
 int packet_size = 0;
 int CWND_size = 0;
+int num_CWND_occupied = 0;
 int pack_num = -1;
 struct packet {
     int seq_num;
@@ -63,6 +64,28 @@ void handle_timeout(struct packet *CWND[], int sockfd, struct sockaddr_in receiv
             }
         }
     }
+}
+
+void handle_ack_recv(struct packet *CWND[], int ack_seq_num){
+    for(int i = 0; i < num_CWND_occupied; i++){
+        if(CWND[i]->seq_num == ack_seq_num){
+            CWND[i]->acked = 1;
+            break;
+        }
+    }
+
+    int num_acked = 0;
+    for(int i = 0; i < num_CWND_occupied; i++){
+        if(CWND[i]->acked == 1){
+            num_acked++;
+        }
+        else break;
+    }
+
+    for(int i = num_acked; i < num_CWND_occupied; i++){
+        CWND[i - num_acked] = CWND[num_acked];
+    }
+    num_CWND_occupied -= num_acked;
 }
 
 // Function to receive a packet
@@ -217,6 +240,7 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
 
         // update global sequence number and window 
         CWND[pack_num] = &send_pkt;
+        num_CWND_occupied++;
         pack_num++;
 
         // wait for ack trial 
@@ -227,6 +251,8 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
         if (bytesReceived >= 0) {
             struct ack_packet received;
             memcpy(&received,buffer,sizeof(buffer));
+            handle_ack_recv(CWND, received.seq_num);
+            /*
             if(received.seq_num == send_pkt.seq_num){
                 printf("received ack for packet  :%d \n", received.seq_num);
                 // printf("packet ack recevied for :%d \n", send_pkt.seq_num);
@@ -238,7 +264,15 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
                 } else{
                     perror("recvfrom failed");
                 }
-            }    
+            }*/    
+        } else {
+            // check timeout
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // Timeout detected
+                handle_timeout(CWND, sockfd, receiver_addr);
+            } else{
+                perror("recvfrom failed");
+            }
         }
         // advance read pointer
         bytesSent += read;
