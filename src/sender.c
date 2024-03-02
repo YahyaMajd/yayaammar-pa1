@@ -52,7 +52,7 @@ int send_packet(struct packet packettosend, int sockfd, struct sockaddr_in recei
 /* timeout handler  */
 void handle_timeout(struct packet *CWND[], int sockfd, struct sockaddr_in receiver_addr){
     printf("timeout occured\n");
-    for(size_t i = 0; i < CWND_size; i++){
+    for(size_t i = 0; i < num_CWND_occupied; i++){
         // check if packet in window is acked, otherwise resend
         if(CWND[i]->acked == 0){
             printf("resending packet : %d \n", CWND[i]->seq_num);
@@ -67,6 +67,7 @@ void handle_timeout(struct packet *CWND[], int sockfd, struct sockaddr_in receiv
 }
 
 void handle_ack_recv(struct packet *CWND[], int ack_seq_num){
+    printf("got ack for %d\n", ack_seq_num);
     for(int i = 0; i < num_CWND_occupied; i++){
         if(CWND[i]->seq_num == ack_seq_num){
             CWND[i]->acked = 1;
@@ -83,9 +84,13 @@ void handle_ack_recv(struct packet *CWND[], int ack_seq_num){
     }
 
     for(int i = num_acked; i < num_CWND_occupied; i++){
-        CWND[i - num_acked] = CWND[num_acked];
+        free(CWND[i - num_acked]);
+        CWND[i - num_acked] = CWND[i];
     }
     num_CWND_occupied -= num_acked;
+    for(int i = 0; i < num_CWND_occupied; i++){
+        printf("CWND packet: %d", CWND[i]->seq_num);
+    }
 }
 
 // Function to receive a packet
@@ -213,71 +218,99 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
     // Read and send the file in chunks
     unsigned long long int bytesSent = 0;
     while (bytesSent < bytesToTransfer && !feof(file)) {
-        size_t toRead = sizeof(buffer);
-        if (bytesToTransfer - bytesSent < toRead) {
-            toRead = bytesToTransfer - bytesSent;
-        }
-        size_t read = fread(buffer, 1, toRead, file); // need to make sure that we don't reach end of file
-        struct packet send_pkt;
-
-        //receiver reordering tests
-        //send_pkt.seq_num  = seq[idx];
-       // idx++;
-
-        send_pkt.seq_num = pack_num;
-        send_pkt.acked = 0;
-
-        printf("packet num : %d\n", pack_num);
-        //printf("packet itlef num: %d\n", send_pkt.seq_num);
-        memcpy(&send_pkt.data,buffer,sizeof(buffer));
-        send_pkt.data_len = read;
-
-        if (send_packet(send_pkt,sockfd,receiver_addr,BUFFER_SIZE) == 0) {
-            printf("rsend failed \n");
-            break;
-        }
-
-
-        // update global sequence number and window 
-        CWND[pack_num] = &send_pkt;
-        num_CWND_occupied++;
-        pack_num++;
-
-        // wait for ack trial 
-        char buffer[sizeof(struct ack_packet)];
-        socklen_t addr_len = sizeof(receiver_addr);
-        ssize_t bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)&receiver_addr, &addr_len);
-        //// TIMEOUT CHECK /////////////////
-        if (bytesReceived >= 0) {
-            struct ack_packet received;
-            memcpy(&received,buffer,sizeof(buffer));
-            handle_ack_recv(CWND, received.seq_num);
-            /*
-            if(received.seq_num == send_pkt.seq_num){
-                printf("received ack for packet  :%d \n", received.seq_num);
-                // printf("packet ack recevied for :%d \n", send_pkt.seq_num);
-                send_pkt.acked = 1;
-            } else{
+        // if buffer is full or file ended/all data sent, wait for ack/timeout
+        if(num_CWND_occupied == CWND_size || bytesSent >= bytesToTransfer){
+            // wait for ack/timeout
+            char buffer[sizeof(struct ack_packet)];
+            socklen_t addr_len = sizeof(receiver_addr);
+            ssize_t bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)&receiver_addr, &addr_len);
+            if (bytesReceived >= 0) {
+                struct ack_packet received;
+                memcpy(&received,buffer,sizeof(buffer));
+                handle_ack_recv(CWND, received.seq_num);
+            }else {
+                // check timeout
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
                     // Timeout detected
                     handle_timeout(CWND, sockfd, receiver_addr);
                 } else{
                     perror("recvfrom failed");
                 }
-            }*/    
-        } else {
-            // check timeout
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                // Timeout detected
-                handle_timeout(CWND, sockfd, receiver_addr);
-            } else{
-                perror("recvfrom failed");
             }
+
         }
-        // advance read pointer
-        bytesSent += read;
-        printf("Sent %zu bytes, total sent: %llu bytes.\n", read, bytesSent);
-    }
+        // otherwise go as normal
+        else {
+            size_t toRead = sizeof(buffer);
+            if (bytesToTransfer - bytesSent < toRead) {
+                toRead = bytesToTransfer - bytesSent;
+            }
+            size_t read = fread(buffer, 1, toRead, file); // need to make sure that we don't reach end of file
+            struct packet* send_pkt = malloc(sizeof(struct packet));
+            if(send_pkt == NULL){
+                printf("malloc failed");
+            }
+            
+            send_pkt.seq_num = pack_num;
+            send_pkt.acked = 0;
+            printf("packet num : %d\n", pack_num);
+            pack_num++;
+            //printf("packet itlef num: %d\n", send_pkt.seq_num);
+            memcpy(&send_pkt->data,buffer,sizeof(buffer));
+            send_pkt->data_len = read;
+            if (send_packet(*send_pkt,sockfd,receiver_addr,BUFFER_SIZE) == 0) {
+                free(send_pkt);
+                printf("rsend failed \n");
+                break;
+            }   
+
+            // update global sequence number and window
+            CWND[num_CWND_occupied] = send_pkt;
+            num_CWND_occupied++;
+
+            // advance read pointer
+            bytesSent += read;
+            printf("Sent %zu bytes, total sent: %llu bytes.\n", read, bytesSent);
+        }
+
+    //     //receiver reordering tests
+    //     //send_pkt.seq_num  = seq[idx];
+    //    // idx++;
+    //     // wait for ack trial 
+    //     char buffer[sizeof(struct ack_packet)];
+    //     socklen_t addr_len = sizeof(receiver_addr);
+    //     ssize_t bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)&receiver_addr, &addr_len);
+    //     //// TIMEOUT CHECK /////////////////
+    //     if (bytesReceived >= 0) {
+    //         struct ack_packet received;
+    //         memcpy(&received,buffer,sizeof(buffer));
+    //         handle_ack_recv(CWND, received.seq_num);
+    //         /*
+    //         if(received.seq_num == send_pkt.seq_num){
+    //             printf("received ack for packet  :%d \n", received.seq_num);
+    //             // printf("packet ack recevied for :%d \n", send_pkt.seq_num);
+    //             send_pkt.acked = 1;
+    //         } else{
+    //             if (errno == EAGAIN || errno == EWOULDBLOCK) {
+    //                 // Timeout detected
+    //                 handle_timeout(CWND, sockfd, receiver_addr);
+    //             } else{
+    //                 perror("recvfrom failed");
+    //             }
+    //         }*/    
+    //     } else {
+    //         // check timeout
+    //         if (errno == EAGAIN || errno == EWOULDBLOCK) {
+    //             // Timeout detected
+    //             handle_timeout(CWND, sockfd, receiver_addr);
+    //         } else{
+    //             perror("recvfrom failed");
+    //         }
+    //     }
+    //     // advance read pointer
+    //     bytesSent += read;
+    //     printf("Sent %zu bytes, total sent: %llu bytes.\n", read, bytesSent);
+    // }
 
     // specify reason to transmission end
     if (bytesSent >= bytesToTransfer) {
