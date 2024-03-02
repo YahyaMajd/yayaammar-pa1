@@ -204,8 +204,7 @@ int initiate_connection(int sockfd, int writeRate, struct sockaddr_in *sender_ad
 void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long long int writeRate) {
     int sockfd;
     struct sockaddr_in my_addr;
-    char buffer[508];
-    FILE *file;
+    char buffer[508];   
 
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd == -1) {
@@ -253,19 +252,26 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
                 RWND[RWND_idx] = curr_packet;
                 RWND_idx++;
                 sortArr(RWND);
+                // for(int i = 0; i < RWND_idx; i++) {
+                //     printf("Packet %d: Seq Num = %d\n", i, RWND[i].seq_num);
+                // }
                 continue;
-            } else last_received_seq++;
+            } else {
+                last_received_seq++;
+            }
             
             // write to file in order
             if(RWND_idx == 0){
+                printf("writing : %d\n",curr_packet.seq_num);
                 write_packet_to_file(curr_packet, writeRate);
             } else {
                 write_packet_to_file(curr_packet, writeRate);
                 last_received_seq++;
-
+    
                 for(int i = 0; i < RWND_idx; i++){
                     // write the stuff in the window in order
                     if(RWND[i].seq_num == last_received_seq + 1){
+                        printf("writing : %d\n",curr_packet.seq_num);
                         write_packet_to_file(RWND[i], writeRate);
                         last_received_seq++;
                     } else{

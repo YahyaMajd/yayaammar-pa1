@@ -33,8 +33,8 @@ struct ack_packet {
     int seq_num;
 };
 
-
-
+int seq[5] = {0,1,3,4,2};
+int idx = 0;
 /*
 Helper function to send packets
 return true if sent successfully and false if errored
@@ -162,6 +162,7 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
 
     // Filling server information
     receiver_addr.sin_family = AF_INET;
+    
     receiver_addr.sin_port = htons(hostUDPport);
     receiver_addr.sin_addr.s_addr = inet_addr(hostname); // Convert IPv4 addresses from text to binary form
     if (inet_pton(AF_INET, hostname, &receiver_addr.sin_addr) <= 0) {
@@ -194,7 +195,9 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
         }
         size_t read = fread(buffer, 1, toRead, file); // need to make sure that we don't reach end of file
         struct packet send_pkt;
-        send_pkt.seq_num  = pack_num;
+        send_pkt.seq_num  = seq[idx];
+        idx++;
+        //pack_num;
         // advance global sequence number 
         pack_num++;
 
@@ -218,6 +221,7 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
             memcpy(&received,buffer,sizeof(buffer));
             if(received.seq_num == send_pkt.seq_num){
                 printf("received ack for packet %d : \n", received.seq_num);
+                send_pkt.acked = 1;
             } else{
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
                     // Timeout detected
