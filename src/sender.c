@@ -49,16 +49,17 @@ int send_packet(struct packet packettosend, int sockfd, struct sockaddr_in recei
 };
 
 /* timeout handler  */
-void handle_timeout(struct packet* CWND[], int sockfd, struct sockaddr_in receiver_addr){
-    printf("timeout occured");
+void handle_timeout(struct packet CWND[], int sockfd, struct sockaddr_in receiver_addr){
+    printf("timeout occured\n");
     for(size_t i = 0; i < CWND_size; i++){
         // check if packet in window is acked, otherwise resend
-        if(CWND[i]->acked == 0){
-            if(send_packet(*CWND[i], sockfd, receiver_addr, BUFFER_SIZE) == 0){
-                printf("on packet %d", CWND[i]->seq_num);
+        if(CWND[i].acked == 0){
+            printf("resending packet : %d \n", CWND[i].seq_num);
+            if(send_packet(CWND[i], sockfd, receiver_addr, BUFFER_SIZE) == 0){
+                printf("on packet %d", CWND[i].seq_num);
                 perror(" error resending packet");
             } else {
-                printf("resent packet %d", CWND[i]->seq_num);
+                printf("resent packet %d", CWND[i].seq_num);
             }
         }
     }
@@ -114,7 +115,7 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
     int write_rate = atoi(write_rate_packet.data);
     printf("%d\n", write_rate);
     // CWND calculation
-    packet_size = 516; // 508 data plus two ints
+    packet_size = 520; // 508 data plus three ints
     // CWND_size = packet_size / write_rate;
     if(write_rate == 0){
         CWND_size = MAX_CWND_SIZE;
@@ -195,11 +196,13 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
         }
         size_t read = fread(buffer, 1, toRead, file); // need to make sure that we don't reach end of file
         struct packet send_pkt;
-        send_pkt.seq_num  = seq[idx];
-        idx++;
-        //pack_num;
-        // advance global sequence number 
-        pack_num++;
+
+        //receiver reordering tests
+       //send_pkt.seq_num  = seq[idx];
+        //idx++;
+
+        send_pkt.seq_num = pack_num;
+        send_pkt.acked = 0;
 
         printf("packet num : %d\n", pack_num);
         //printf("packet itlef num: %d\n", send_pkt.seq_num);
@@ -210,6 +213,11 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
             printf("rsend failed \n");
             break;
         }
+
+
+        // update global sequence number and window 
+       // CWND[pack_num] = send_pkt;
+        pack_num++;
 
         // wait for ack trial 
         char buffer[sizeof(struct ack_packet)];
@@ -225,7 +233,7 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
             } else{
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
                     // Timeout detected
-                    handle_timeout(&CWND, sockfd, receiver_addr);
+                    handle_timeout(CWND, sockfd, receiver_addr);
                 } else{
                     perror("recvfrom failed");
                 }

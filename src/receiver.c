@@ -243,6 +243,7 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
         }
         else{
             // acknowledge packet
+            sleep(12);
             if(!send_ack(sockfd,sender_addr,curr_packet.seq_num)){
                 printf("failed to send ack\n");
             }
@@ -267,7 +268,7 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
             } else {
                 write_packet_to_file(curr_packet, writeRate);
                 last_received_seq++;
-    
+
                 for(int i = 0; i < RWND_idx; i++){
                     // write the stuff in the window in order
                     if(RWND[i].seq_num == last_received_seq + 1){
