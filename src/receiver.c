@@ -245,12 +245,15 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
             // acknowledge packet
 
             // timoeut test
-           // sleep(12);
+            //sleep(12);
 
             if(!send_ack(sockfd,sender_addr,curr_packet.seq_num)){
                 printf("failed to send ack\n");
             }
-
+            // if packet already received send ack ^^ and continue to next packet
+            if(curr_packet.seq_num <= last_received_seq){
+                continue;
+            }
             // make sure we're getting packets in order
             if(curr_packet.seq_num != last_received_seq + 1){
                 RWND[RWND_idx] = curr_packet;

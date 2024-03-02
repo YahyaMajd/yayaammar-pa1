@@ -49,17 +49,17 @@ int send_packet(struct packet packettosend, int sockfd, struct sockaddr_in recei
 };
 
 /* timeout handler  */
-void handle_timeout(struct packet CWND[], int sockfd, struct sockaddr_in receiver_addr){
+void handle_timeout(struct packet *CWND[], int sockfd, struct sockaddr_in receiver_addr){
     printf("timeout occured\n");
     for(size_t i = 0; i < CWND_size; i++){
         // check if packet in window is acked, otherwise resend
-        if(CWND[i].acked == 0){
-            printf("resending packet : %d \n", CWND[i].seq_num);
-            if(send_packet(CWND[i], sockfd, receiver_addr, BUFFER_SIZE) == 0){
-                printf("on packet %d", CWND[i].seq_num);
+        if(CWND[i]->acked == 0){
+            printf("resending packet : %d \n", CWND[i]->seq_num);
+            if(send_packet(*CWND[i], sockfd, receiver_addr, BUFFER_SIZE) == 0){
+                printf("on packet %d", CWND[i]->seq_num);
                 perror(" error resending packet");
             } else {
-                printf("resent packet %d", CWND[i].seq_num);
+                printf("resent packet %d", CWND[i]->seq_num);
             }
         }
     }
@@ -185,7 +185,7 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
     initiate_connection(sockfd, &receiver_addr, SYN_size);
 
    //sleep(15);
-    struct packet CWND[CWND_size];
+    struct packet *CWND[CWND_size];
 
     // Read and send the file in chunks
     unsigned long long int bytesSent = 0;
@@ -201,7 +201,7 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
         //send_pkt.seq_num  = seq[idx];
        // idx++;
 
-        //send_pkt.seq_num = pack_num;
+        send_pkt.seq_num = pack_num;
         send_pkt.acked = 0;
 
         printf("packet num : %d\n", pack_num);
@@ -216,7 +216,7 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
 
 
         // update global sequence number and window 
-        //CWND[pack_num] = send_pkt;
+        CWND[pack_num] = &send_pkt;
         pack_num++;
 
         // wait for ack trial 
@@ -228,7 +228,8 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
             struct ack_packet received;
             memcpy(&received,buffer,sizeof(buffer));
             if(received.seq_num == send_pkt.seq_num){
-                printf("received ack for packet %d : \n", received.seq_num);
+                printf("received ack for packet  :%d \n", received.seq_num);
+                // printf("packet ack recevied for :%d \n", send_pkt.seq_num);
                 send_pkt.acked = 1;
             } else{
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
