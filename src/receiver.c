@@ -93,6 +93,38 @@ int send_ack(int sockfd, struct sockaddr_in receiver_addr , int seq){
     return 1;
 }
 
+/*
+Helper function to write packet data to file
+Makes sure that we only write at the specified writeRate
+*/
+int write_packet_to_file(struct packet packet, int writeRate){
+    char buffer[DATA_SIZE];
+    memcpy(buffer,&packet.data,sizeof(packet.data));
+             printf("Received packet contains: \"%s\"\n", buffer);
+    int bytesWritten = 0;
+    while(bytesWritten < packet.data_len){
+
+        if(writeRate == 0){
+            if (fwrite(buffer, 1, packet.data_len, file) != (packet.data_len)) {
+                perror("Failed to write to file");
+                break; // Handle the write error
+            }
+            bytesWritten = packet.data_len;
+            fflush(file);
+        } else {
+            time_t start_time = time(NULL); // curr time
+            if (fwrite(buffer+bytesWritten, 1, writeRate, file) != (writeRate)) {
+                perror("Failed to write to file");
+                break; // Handle the write error
+            }
+            bytesWritten += writeRate;
+            fflush(file);
+            time_t end_time = time(NULL);
+            sleep(difftime(end_time, start_time));
+        }
+    }
+}
+
 int initiate_connection(int sockfd, int writeRate, struct sockaddr_in *sender_addr){
    // struct packet SYN;
 
@@ -194,16 +226,7 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
             if(!send_ack(sockfd,sender_addr,curr_packet.seq_num)){
                 printf("failed to send ack\n");
             }
-            // Directly writing packet data to the file
-            //printf("Received packet contains: \"%s\"\n", curr_packet.data);
-            memcpy(buffer,&curr_packet.data,sizeof(curr_packet.data));
-             printf("Received packet contains: \"%s\"\n", buffer);
-            // Example adjustment for writing to the file
-            if (fwrite(buffer, 1, curr_packet.data_len, file) != (curr_packet.data_len)) {
-                perror("Failed to write to file");
-                break; // Handle the write error
-            }
-            fflush(file);
+            write_packet_to_file(curr_packet, writeRate);
         }        
     }
 

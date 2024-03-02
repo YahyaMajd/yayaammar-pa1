@@ -17,6 +17,7 @@
 
 #define DATA_SIZE 508
 #define BUFFER_SIZE 520
+#define MAX_CWND_SIZE 100 // need to double check
 
 int packet_size = 0;
 int CWND_size = 0;
@@ -26,7 +27,6 @@ struct packet {
     int data_len;
     char data[DATA_SIZE];
     int acked;  
-    //time_t time_sent; // gonna need to adjust sizes!!!
 };
 
 struct ack_packet {
@@ -39,7 +39,6 @@ struct ack_packet {
 Helper function to send packets
 return true if sent successfully and false if errored
 */
-// should we create a new buffer everytime or just pass a pointer to a premade buffer?
 int send_packet(struct packet packettosend, int sockfd, struct sockaddr_in receiver_addr, size_t packet_size){
     char buffer[packet_size];
     memcpy(buffer, &packettosend, sizeof(packettosend));
@@ -117,6 +116,12 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
     // CWND calculation
     packet_size = 516; // 508 data plus two ints
     // CWND_size = packet_size / write_rate;
+    if(write_rate == 0){
+        CWND_size = MAX_CWND_SIZE;
+    } else {
+        if(write_rate / packet_size < 1) CWND_size = 1;
+        else CWND_size = write_rate / packet_size;
+    }
 
     // send ack
     struct ack_packet ack;
