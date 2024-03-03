@@ -74,6 +74,16 @@ int send_packet(struct packet packettosend, int sockfd, struct sockaddr_in recei
     return 1;
 };
 
+void print_sender_port(int sockfd) {
+    struct sockaddr_in sin;
+    socklen_t len = sizeof(sin);
+    if (getsockname(sockfd, (struct sockaddr *)&sin, &len) == -1) {
+        perror("getsockname failed");
+    } else {
+        printf("Sender port: %d\n", ntohs(sin.sin_port));
+    }
+}
+
 /*
 @brief helper function to handle timeouts
 
@@ -180,7 +190,7 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
     sprintf(SYN.data,"%d",bytesTransferring);
     // advance global sequence number 
     pack_num++;
-
+    print_sender_port(sockfd);
     // send initiation packet
     if(send_packet(SYN, sockfd, *receiver_addr, SYN_size) == 0){
         perror("Failure to send SYN");
