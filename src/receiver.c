@@ -210,6 +210,7 @@ int initiate_connection(int sockfd, int writeRate, struct sockaddr_in *sender_ad
     while(1){
         // check size (last argument)
         printf("sending writeRate packet...\n");
+        printf("%s", inet_ntoa(sender_addr->sin_addr));
         if(send_packet(SYN_ACK, sockfd, *sender_addr, 500) == 0){
             perror("failure to send write rate");
         } 
