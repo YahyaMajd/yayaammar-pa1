@@ -60,39 +60,26 @@ void sortArr(struct packet arr[]){
 }
 
 // Function to receive a packet
-// Change the function signature
-int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in** sender_addr, ssize_t *bytesReceived) {
-    char buffer[sizeof(*packet)];
-    // Allocate memory for sender address
-    *sender_addr = (struct sockaddr_in*)malloc(sizeof(struct sockaddr_in));
-    if (*sender_addr == NULL) {
-        // Handle memory allocation failure
-        perror("Failed to allocate memory for sender address");
-        return -1; // or appropriate error handling
-    }
-    socklen_t addr_len = sizeof(**sender_addr);
-
-    *bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)*sender_addr, &addr_len);
-    if (*bytesReceived < 0) {
-        // Free allocated memory in case of error
-        free(*sender_addr);
-        *sender_addr = NULL; // Avoid dangling pointer
+int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender_addr, ssize_t *bytesReceived) {
+    char buffer[sizeof(*packet)]; // Correctly use sizeof(*packet) to get the size of the structure
+    socklen_t addr_len = sizeof(*sender_addr);
+     *bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)sender_addr, &addr_len);
+    if (*bytesReceived < 0){
         perror("recvfrom failed in receiver packets");
-        return -1; // or appropriate error handling
+        return 0;
     }
-
-    printf("Received %zd bytes\n", *bytesReceived);
+    
+    printf("Received %zd bytes\n", *bytesReceived); // Print the number of received bytes
+    // Optionally print the sender's IP address
     char senderIP[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &(*sender_addr)->sin_addr, senderIP, sizeof(senderIP));
+    inet_ntop(AF_INET,(const void *)&sender_addr->sin_addr, senderIP, sizeof(senderIP));
     printf("From %s\n", senderIP);
 
-    // Process packet data...
-    buffer[*bytesReceived] = '\0'; // Ensure null-termination
+    // If the data is expected to be text, print the received text (ensure it's null-terminated)
+    buffer[*bytesReceived] = '\0'; // Make sure there's no buffer overflow here
     memcpy(packet, buffer, sizeof(*packet));
-
     return 1; // Success
 }
-
 
 // Function to send packet
 int send_packet(struct packet packettosend, int sockfd, struct sockaddr_in receiver_addr, size_t buffer_size){
@@ -242,12 +229,13 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
         exit(EXIT_FAILURE);
     }
 
-    struct sockaddr_in *sender_addr;
+    //struct sockaddr_in sender_addr;
+    struct sockaddr_in* sender_addr = malloc(sizeof(struct sockaddr_in));
     ssize_t bytesReceived;
     while (1) {
         struct packet curr_packet;
         printf("receiving.....\n");
-        if(receive_packet(sockfd,&curr_packet,&sender_addr,&bytesReceived) == 0) continue;
+        if(receive_packet(sockfd,&curr_packet,sender_addr,&bytesReceived) == 0) continue;
         
         // handshake check
         if(curr_packet.seq_num == - 1){
@@ -305,9 +293,7 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
         }        
     }
 
-    if (sender_addr != NULL) {
-        free(sender_addr);
-    }
+
     fclose(file);
     close(sockfd);
 }
