@@ -288,6 +288,7 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
             break;
         }
         if(curr_packet.seq_num == - 1){
+            printf("handshake begins...\n");
             totalToReceive = atoi(curr_packet.data);
             initiate_connection(sockfd,  writeRate, &sender_addr);
         }
