@@ -101,6 +101,7 @@ int send_packet(struct packet packettosend, int sockfd, struct sockaddr_in recei
     memcpy(buffer, &packettosend, sizeof(packettosend));
     receiver_addr.sin_family = AF_INET;
     if (sendto(sockfd, buffer, buffer_size, 0, (const struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) < 0) {
+            perror("failed to send\n");
             return 0;
         }
     return 1;
