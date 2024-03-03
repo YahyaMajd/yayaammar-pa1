@@ -209,10 +209,11 @@ int initiate_connection(int sockfd, int writeRate, struct sockaddr_in *sender_ad
     
     while(1){
         // check size (last argument)
+        printf("sending writeRate packet...\n");
         if(send_packet(SYN_ACK, sockfd, *sender_addr, 500) == 0){
             perror("failure to send write rate");
         } 
-
+         printf("sent writeRate packet...\n");
         char buffer[sizeof(struct ack_packet)];
         socklen_t addr_len = sizeof(*sender_addr);
         ssize_t bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)sender_addr, &addr_len);
