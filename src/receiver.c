@@ -120,7 +120,7 @@ int write_packet_to_file(struct packet packet, int writeRate){
         if(writeRate == 0){
             if (fwrite(buffer, 1, packet.data_len, file) != (packet.data_len)) {
                 perror("Failed to write to file");
-                break; // Handle the write error
+                return 0;
             }
             bytesWritten = packet.data_len;
             fflush(file);
@@ -136,7 +136,7 @@ int write_packet_to_file(struct packet packet, int writeRate){
             } 
             if (fwrite(currBuffer, 1, write_amt, file) != (write_amt)) {
                 perror("Failed to write to file");
-                break; // Handle the write error
+                return 0;
             }
             bytesWritten += write_amt;
             fflush(file);
@@ -144,6 +144,7 @@ int write_packet_to_file(struct packet packet, int writeRate){
             sleep(difftime(end_time, start_time));
         }
     }
+    return 1;
 }
 
 int initiate_connection(int sockfd, int writeRate, struct sockaddr_in *sender_addr){
@@ -231,7 +232,7 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
 
     struct sockaddr_in sender_addr;
     ssize_t bytesReceived;
-    while ( 1) {
+    while (1) {
         struct packet curr_packet;
         printf("receiving.....\n");
         if(receive_packet(sockfd,&curr_packet,&sender_addr,&bytesReceived) == 0) continue;
@@ -245,7 +246,7 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
             // acknowledge packet
 
             // timoeut test
-            //sleep(12);
+            sleep(6);
 
             if(!send_ack(sockfd,sender_addr,curr_packet.seq_num)){
                 printf("failed to send ack\n");
