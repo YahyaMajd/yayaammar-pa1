@@ -267,7 +267,7 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
     my_addr.sin_family = AF_INET;
     my_addr.sin_addr.s_addr = INADDR_ANY;
     my_addr.sin_port = htons(myUDPport);
-
+    printf("%s : %d\n", inet_ntoa(my_addr.sin_addr),ntohs(my_addr.sin_port));
     if (bind(sockfd, (const struct sockaddr *)&my_addr, sizeof(my_addr)) < 0) {
         perror("bind failed");
         exit(EXIT_FAILURE);

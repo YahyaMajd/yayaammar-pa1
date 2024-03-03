@@ -1,3 +1,4 @@
+
 /*
 @file sender.c
 @brief the sender file, implements rsend 
@@ -142,7 +143,7 @@ int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender
     socklen_t addr_len = sizeof(*sender_addr);
     
     ssize_t bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0,
-                                     (struct sockaddr*)sender_addr, &addr_len);
+                                     (struct sockaddr*) &sender_addr, &addr_len);
     if (bytesReceived < 0) {
         perror("recvfrom failed");
         return 0;
@@ -254,7 +255,6 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
 
     // Filling server information
     receiver_addr.sin_family = AF_INET;
-    
     receiver_addr.sin_port = htons(hostUDPport);
     receiver_addr.sin_addr.s_addr = inet_addr(hostname); // Convert IPv4 addresses from text to binary form
     if (inet_pton(AF_INET, hostname, &receiver_addr.sin_addr) <= 0) {
