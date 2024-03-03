@@ -1,3 +1,13 @@
+/*
+@file sender.c
+@brief the sender file, implements rsend 
+@author Ammar Sallam (asallam02)
+@author Yahya Abulmagd (YahyaMajd)
+
+@bugs no known bugs
+*/
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,13 +27,17 @@
 
 #define DATA_SIZE 508
 #define BUFFER_SIZE 520
-#define MAX_CWND_SIZE 100 // need to double check
+#define MAX_CWND_SIZE 100 
 
 int packet_size = 0;
 int CWND_size = 0;
 int num_CWND_occupied = 0;
 int pack_num = -1;
 int bytesTransferring = 0;
+
+/*
+@brief packet structure, used to deserialize incoming packets
+*/
 struct packet {
     int seq_num;
     int data_len;
@@ -31,44 +45,67 @@ struct packet {
     int acked;  
 };
 
+/*
+@brief ack packet structure, used to serialize and deserialize packets
+*/
 struct ack_packet {
     int seq_num;
 };
 
-//int seq[5] = {0,1,3,4,2};
-//int idx = 0;
+
 /*
-Helper function to send packets
-return true if sent successfully and false if errored
+@brief helper function to send packets, serializes packets to bytes to be sent
+
+@param packettosend: the packet to be sent
+@param sockfd: socket information
+@param receiver_addr: the receiver address to send data to
+@param packet_size: the size of the data to be sent
+
+@return 0 in case of failure, 1 in case of success
 */
 int send_packet(struct packet packettosend, int sockfd, struct sockaddr_in receiver_addr, size_t packet_size){
     char buffer[packet_size];
     memcpy(buffer, &packettosend, sizeof(packettosend));
     if (sendto(sockfd, buffer, BUFFER_SIZE, 0, (const struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) < 0) {
+            perror("send packet failed");
             return 0;
         }
     return 1;
 };
 
-/* timeout handler  */
+/*
+@brief helper function to handle timeouts
+
+goes through the congestion window, resends any un-acked
+packets
+
+@param CWND: the congestion window array
+@param sockfd: socket information
+@param receiver_addr: the receiver address to send data to
+*/
 void handle_timeout(struct packet *CWND[], int sockfd, struct sockaddr_in receiver_addr){
-    printf("timeout occured\n");
     for(size_t i = 0; i < num_CWND_occupied; i++){
         // check if packet in window is acked, otherwise resend
         if(CWND[i]->acked == 0){
-            printf("resending packet : %d \n", CWND[i]->seq_num);
             if(send_packet(*CWND[i], sockfd, receiver_addr, BUFFER_SIZE) == 0){
-                printf("on packet %d", CWND[i]->seq_num);
                 perror(" error resending packet");
-            } else {
-                printf("resent packet %d\n", CWND[i]->seq_num);
             }
         }
     }
 }
 
+/*
+@brief helper function to handle receiving acks
+
+marks packets as acked and slides the congestion 
+window if needed
+
+@param CWND: the congestion window array
+@param ack_seq_num: the sequence number of the incoming ack
+
+@return 0 in case of failure, 1 in case of success
+*/
 void handle_ack_recv(struct packet *CWND[], int ack_seq_num){
-    printf("got ack for %d\n", ack_seq_num);
     for(int i = 0; i < num_CWND_occupied; i++){
         if(CWND[i]->seq_num == ack_seq_num){
             CWND[i]->acked = 1;
@@ -89,13 +126,17 @@ void handle_ack_recv(struct packet *CWND[], int ack_seq_num){
         CWND[i - num_acked] = CWND[i];
     }
     num_CWND_occupied -= num_acked;
-    for(int i = 0; i < num_CWND_occupied; i++){
-        printf("CWND packet: %d\n", CWND[i]->seq_num);
-    }
-    printf("CWND packet: %d\n", CWND[1]->seq_num);
 }
 
-// Function to receive a packet
+/*
+@brief helper function to receive packets, deserializes the data coming on into the packet data structure
+
+@param sockfd: socket information
+@param packet: a pointer to store the packet to be received
+@param sender_addr: the sender address to receive data from
+
+@return 0 in case of failure, 1 in case of success
+*/
 int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender_addr) {
     char buffer[sizeof(*packet)]; // Correctly use sizeof(*packet) to get the size of the structure
     socklen_t addr_len = sizeof(*sender_addr);
@@ -113,6 +154,21 @@ int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender
 
 /*
 initiates connection with receiver, returns the packet size and congestion window size to be used
+*/
+
+/*
+@brief helper function to initiate connection with the receiver
+
+This function initiates the connection with the receiver, it 
+sends the expected bytesToTransfer to the receiver. Sets the 
+packet size and congestion window size based on receiver write
+rate.
+
+@param sockfd: socket information
+@param receiver_addr: the receiver address to send/receive data
+@param SYN_size: size of the SYN packet
+
+@return 0 in case of failure, 1 in case of success
 */
 int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SYN_size){
     // send SYN message
@@ -135,18 +191,14 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
         if(receive_packet(sockfd, &write_rate_packet, receiver_addr) == 0){
             perror("failure receiving write rate");
         } else {
-            printf("received write rate\n");
             break;  
         }
     }
     
     // deserialize write rate, figure out the congestion window and packet size
-    
     int write_rate = atoi(write_rate_packet.data);
-    printf("%d\n", write_rate);
     // CWND calculation
     packet_size = 520; // 508 data plus three ints
-    // CWND_size = packet_size / write_rate;
     if(write_rate == 0){
         CWND_size = MAX_CWND_SIZE;
     } else {
@@ -164,13 +216,21 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
     if (sendto(sockfd, buffer, packet_size, 0, (const struct sockaddr *) receiver_addr, sizeof(*receiver_addr)) < 0) {
         perror("failed to send ack");
     }
-    else{
-        printf("sent ack\nexiting initiate connection\n");
-    }
     return 1;
 }
 
+/*
+@brief the main function for reliably sending data
 
+This is the main function of the sender, it initiates connection
+with the receiver, reads data from file, and sends the data to 
+the receiver while handling dropped messages. 
+
+@param hostname: the current host address
+@param myUDPport: port number for the receiver to receive on
+@param filename: the file to read the data from
+@param bytesToTransfer: tthe amount of bytes to send
+*/
 void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsigned long long int bytesToTransfer) {
     bytesTransferring = bytesToTransfer;
     int sockfd;
@@ -186,7 +246,7 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
     // set timeout
     struct timeval tv;
     tv.tv_sec = 5;
-    tv.tv_usec =0; // value to timeout rn
+    tv.tv_usec = 0; 
     if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
         perror("Error setting options");
     }
@@ -209,13 +269,11 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
         perror("Failed to open file");
         exit(EXIT_FAILURE);
     }
-    printf("File opened successfully.\n");
 
     // establish connection with receiver
     size_t SYN_size = 516; 
     initiate_connection(sockfd, &receiver_addr, SYN_size);
 
-   //sleep(15);
     struct packet *CWND[CWND_size];
 
     // Read and send the file in chunks
@@ -252,50 +310,40 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
             size_t read = fread(buffer, 1, toRead, file); // need to make sure that we don't reach end of file
             struct packet* send_pkt = malloc(sizeof(struct packet));
             if(send_pkt == NULL){
-                printf("malloc failed");
+                perror("malloc failed");
             }
             
             send_pkt->seq_num = pack_num;
             send_pkt->acked = 0;
-            printf("packet num : %d\n", pack_num);
             pack_num++;
-            //printf("packet itlef num: %d\n", send_pkt.seq_num);
             memcpy(&send_pkt->data,buffer,sizeof(buffer));
             send_pkt->data_len = read;
             if (send_packet(*send_pkt,sockfd,receiver_addr,BUFFER_SIZE) == 0) {
                 free(send_pkt);
-                printf("rsend failed \n");
                 break;
             }   
 
             // update global sequence number and window
-            printf("putting packed : %d in window\n",send_pkt->seq_num);
             CWND[num_CWND_occupied] = send_pkt;
             num_CWND_occupied++;
 
             // advance read pointer
             bytesSent += read;
-            printf("Sent %zu bytes, total sent: %llu bytes.\n", read, bytesSent);
         }
     
     }
     // specify reason to transmission end
-    if (bytesSent >= bytesToTransfer) {
-        printf("Specified amount of data sent successfully.\n");
-    } else {
-        printf("Reached end of file before sending specified amount of data.\n");
+    if (bytesSent < bytesToTransfer) {
         struct packet FIN; 
         FIN.seq_num = -2;
         FIN.acked = 0;
-        if (send_packet(FIN, sockfd, receiver_addr, packet_size)== 0) {
-
-            printf("rsend failed \n");
-        } 
+        send_packet(FIN, sockfd, receiver_addr, packet_size);
     }
     fclose(file);
     close(sockfd);
-    printf("File and socket closed, exiting.\n");
 }
+
+
 int main(int argc, char** argv) {
     if (argc != 5) {
         fprintf(stderr, "usage: %s receiver_hostname receiver_port filename_to_xfer bytes_to_xfer\n", argv[0]);

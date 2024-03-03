@@ -1,3 +1,12 @@
+/*
+@file receiver.c
+@brief the receiver file, implements rrcv 
+@author Ammar Sallam (asallam02)
+@author Yahya Abulmagd (YahyaMajd)
+
+@bugs works fine on Yahya's laptop (mac), gives an error on WSL and on cloudlab "Address family not supported"
+*/
+
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,27 +24,13 @@
 
 #include <signal.h>
 
-FILE *file; // Make sure file is accessible in the signal handler context
+FILE *file;
 #define DATA_SIZE  508
+#define WRITERATE  508
 
-///////////////////////////////// TESTING FUNCTIONS ////////////////////////////////////////////
-void handle_timeout() {
-    printf("Timeout occurred.\n");
-    // Handle the timeout, such as retrying the operation, logging, or cleaning up resources.
-}
-
-void sigint_handler(int sig) {
-    printf("Caught signal %d, closing file and exiting.\n", sig);
-    if (file != NULL) {
-        fclose(file); // Close the file on SIGINT
-        file = NULL; // Prevent use-after-free
-    }
-    exit(0); // Exit gracefully
-}
-
-
-/////////////////////////////// REAL TING //////////////////////////////////////////
-
+/*
+@brief packet structure, used to deserialize incoming packets
+*/
 struct packet {
     int seq_num;
     int data_len;
@@ -43,15 +38,20 @@ struct packet {
     int acked;
 };
 
+/*
+@brief ack packet structure, used to serialize and deserialize packets
+*/
 struct ack_packet {
     int seq_num;
 };
 
 int last_received_seq = -1;
 int RWND_idx = 0;
-struct packet RWND[100]; //size is a placeholder 
+struct packet RWND[100];
 int totalBytesReceived = 0;
 int totalToReceive = 1;
+
+
 int compare(const void *a, const void *b) {
     return ((struct packet*)a)->seq_num - ((struct packet*)b)->seq_num;
 }
@@ -60,7 +60,16 @@ void sortArr(struct packet arr[]){
     qsort(arr, RWND_idx, sizeof(struct packet), compare);
 }
 
-// Function to receive a packet
+/*
+@brief helper function to receive packets, deserializes the data coming on into the packet data structure
+
+@param sockfd: socket information
+@param packet: a pointer to store the packet to be received
+@param sender_addr: the sender address to receive data from
+@param bytesReceived: a pointer to store the amount of bytes that have been received
+
+@return 0 in case of failure, 1 in case of success
+*/
 int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender_addr, ssize_t *bytesReceived) {
     char buffer[sizeof(*packet)]; // Correctly use sizeof(*packet) to get the size of the structure
     socklen_t addr_len = sizeof(*sender_addr);
@@ -69,20 +78,23 @@ int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender
         perror("recvfrom failed in receiver packets");
         return 0;
     }
-    
-    printf("Received %zd bytes\n", *bytesReceived); // Print the number of received bytes
-    // Optionally print the sender's IP address
-    char senderIP[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET,(const void *)&sender_addr->sin_addr, senderIP, sizeof(senderIP));
-    printf("From %s\n", senderIP);
 
     // If the data is expected to be text, print the received text (ensure it's null-terminated)
-    buffer[*bytesReceived - 4] = '\0'; // Make sure there's no buffer overflow here
+    buffer[*bytesReceived] = '\0'; // Make sure there's no buffer overflow here
     memcpy(packet, buffer, sizeof(*packet));
     return 1; // Success
 }
 
-// Function to send packet
+/*
+@brief helper function to send packets, serializes packets to bytes to be sent
+
+@param packettosend: the packet to be sent
+@param sockfd: socket information
+@param receiver_addr: the receiver address to send data to
+@param buffer_size: the size of the data to be sent
+
+@return 0 in case of failure, 1 in case of success
+*/
 int send_packet(struct packet packettosend, int sockfd, struct sockaddr_in receiver_addr, size_t buffer_size){
     char buffer[buffer_size];
     memcpy(buffer, &packettosend, sizeof(packettosend));
@@ -92,11 +104,18 @@ int send_packet(struct packet packettosend, int sockfd, struct sockaddr_in recei
     return 1;
 };
 
+/*
+@brief helper function to send acks
 
+@param sockfd: socket information
+@param receiver_addr: the receiver address to send data to
+@param seq: the sequence number of the ack
+
+@return 0 in case of failure, 1 in case of success
+*/
 int send_ack(int sockfd, struct sockaddr_in receiver_addr , int seq){
     struct ack_packet ack;
     ack.seq_num = seq;
-    printf("sending acknowledgment: %d\n", seq );
     char buffer[sizeof(struct ack_packet)];
     memcpy(buffer, &ack, sizeof(ack));
     if (sendto(sockfd, buffer, sizeof(struct ack_packet), 0, (const struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) < 0) {
@@ -106,15 +125,22 @@ int send_ack(int sockfd, struct sockaddr_in receiver_addr , int seq){
     return 1;
 }
 
+
 /*
-Helper function to write packet data to file
-Makes sure that we only write at the specified writeRate
+@brief Helper function to write packet data to file
+
+Writes data to file at a specified writeRate, 
+also modifies totalBytesReceived based on the amount of bytes written to file
+
+@param packet: the packet to be written to file
+@param writeRate: the maximum write rate per second 
+
+@return 0 in case of failure, 1 in case of success
 */
 int write_packet_to_file(struct packet packet, int writeRate){
     char buffer[DATA_SIZE];
     char currBuffer[writeRate];
     memcpy(buffer,&packet.data,sizeof(packet.data));
-             printf("Received packet contains: \"%s\"\n", buffer);
     int bytesWritten = 0;
     while(bytesWritten < packet.data_len){
 
@@ -149,18 +175,29 @@ int write_packet_to_file(struct packet packet, int writeRate){
     return 1;
 }
 
+/*
+@brief helper function to initiate connection with the sender
+
+This function initiates the connection with the sender upon receiving 
+a packet with sequence number = -1, it send the write rate to the 
+sender and awaits an ack. After which the receiver will begin 
+receiving normally
+
+@param sockfd: socket information
+@param writeRate: the write rate to communicate to the sender
+@param sender_addr: the receiver address to send data to
+
+@return 0 in case of failure, 1 in case of success
+*/
 int initiate_connection(int sockfd, int writeRate, struct sockaddr_in *sender_addr){
-   // struct packet SYN;
 
     // set timeout
     struct timeval tv;
-    tv.tv_sec = 10;
-    tv.tv_usec = 0; // value to timeout rn
+    tv.tv_sec = 5;
+    tv.tv_usec = 0; 
     if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
         perror("Error setting options");
     }
-
-    printf("Received handshake initiation.\n");
 
     struct packet SYN_ACK;
     SYN_ACK.seq_num = -1;
@@ -171,23 +208,19 @@ int initiate_connection(int sockfd, int writeRate, struct sockaddr_in *sender_ad
         // check size (last argument)
         if(send_packet(SYN_ACK, sockfd, *sender_addr, 500) == 0){
             perror("failure to send write rate");
-        } else{
-            printf("sent write rate succesfully\n");
-        }
+        } 
 
         char buffer[sizeof(struct ack_packet)];
         socklen_t addr_len = sizeof(*sender_addr);
         ssize_t bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)sender_addr, &addr_len);
 
-        //// TIMEOUT CHECK /////////////////
+        // check for timeout
         if (bytesReceived >= 0) {
             struct ack_packet received;
             memcpy(&received,buffer,sizeof(buffer));
             if(received.seq_num == -1){
-                printf("received ack\n");
                 return 1;
             }     
-            
         }
         else{
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -203,18 +236,27 @@ int initiate_connection(int sockfd, int writeRate, struct sockaddr_in *sender_ad
     return 0; 
 }
 
+/*
+@brief the main function for reliably receiving data
 
+This is the main function of the receiver, it initiates connection
+with the sender, keeps receiving messages, writes data to file in
+order, and then terminates then closes when the sender is done 
+sending. 
+
+@param myUDPport: port number for the receiver to receive on
+@param destination file: the file to write the incoming data to
+@param writeRate: the maximum bytes/s to be written to the file
+*/
 void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long long int writeRate) {
     int sockfd;
-    struct sockaddr_in my_addr;
-    char buffer[508];   
+    struct sockaddr_in my_addr;   
 
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd == -1) {
         perror("socket creation failed");
         exit(EXIT_FAILURE);
     }
-
 
     memset(&my_addr, 0, sizeof(my_addr));
     my_addr.sin_family = AF_INET;
@@ -236,7 +278,6 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
     ssize_t bytesReceived;
     while (totalBytesReceived < totalToReceive) {
         struct packet curr_packet;
-        printf("receiving.....\n");
         if(receive_packet(sockfd,&curr_packet,&sender_addr,&bytesReceived) == 0) continue;
         
         // handshake check
@@ -244,20 +285,12 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
             break;
         }
         if(curr_packet.seq_num == - 1){
-            printf("handshake....\n");
             totalToReceive = atoi(curr_packet.data);
-            printf("RECEIVING : %d\n", totalToReceive);
             initiate_connection(sockfd,  writeRate, &sender_addr);
         }
         else{
             // acknowledge packet
-
-            // timoeut test
-            
-
-            if(!send_ack(sockfd,sender_addr,curr_packet.seq_num)){
-                printf("failed to send ack\n");
-            }
+            send_ack(sockfd,sender_addr,curr_packet.seq_num);
             // if packet already received send ack ^^ and continue to next packet
             if(curr_packet.seq_num <= last_received_seq){
                 continue;
@@ -273,18 +306,13 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
             }
             
             if(RWND_idx == 0){
-                printf("writing in order: %d\n",curr_packet.seq_num);
                 write_packet_to_file(curr_packet, writeRate);
             } else {
-                printf("write : %d\n", curr_packet.seq_num);
                 write_packet_to_file(curr_packet, writeRate);
-               // last_received_seq++;
-                printf("Last received = %d\n RWND_IDX = %d\n",last_received_seq, RWND_idx);
                
                 for(int i = 0; i < RWND_idx; i++){
                     // write the stuff in the window in order
                     if(RWND[i].seq_num == last_received_seq + 1){
-                        printf("writing out of order: %d\n",curr_packet.seq_num);
                         write_packet_to_file(RWND[i], writeRate);
                         last_received_seq++;
                     } else{
@@ -301,14 +329,12 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
         }        
     }
 
-    printf("EXITING\n");
     fclose(file);
     close(sockfd);
 }
 
 
 int main(int argc, char** argv) {
-    signal(SIGINT, sigint_handler);
     if (argc != 3) {
         fprintf(stderr, "usage: %s UDP_port filename_to_write\n", argv[0]);
         exit(EXIT_FAILURE);
@@ -316,7 +342,7 @@ int main(int argc, char** argv) {
 
     unsigned short int myUDPport = (unsigned short int)atoi(argv[1]);
     char* destinationFile = argv[2];
-    unsigned long long int writeRate = 10; // Placeholder, adjust as needed
+    unsigned long long int writeRate = WRITERATE; 
 
     rrecv(myUDPport, destinationFile, writeRate);
 
