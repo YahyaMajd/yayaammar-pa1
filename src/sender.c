@@ -190,12 +190,12 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
     sprintf(SYN.data,"%d",bytesTransferring);
     // advance global sequence number 
     pack_num++;
-    print_sender_port(sockfd);
+   
     // send initiation packet
     if(send_packet(SYN, sockfd, *receiver_addr, SYN_size) == 0){
         perror("Failure to send SYN");
     }
-
+     print_sender_port(sockfd);
     // receive packet with writeRate
     struct packet write_rate_packet;
     while(1){
@@ -205,7 +205,7 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
             break;  
         }
     }
-    
+     print_sender_port(sockfd);
     // deserialize write rate, figure out the congestion window and packet size
     int write_rate = atoi(write_rate_packet.data);
     // CWND calculation
