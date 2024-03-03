@@ -1,3 +1,4 @@
+
 /*
 @file receiver.c
 @brief the receiver file, implements rrcv 
@@ -98,6 +99,7 @@ int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender
 int send_packet(struct packet packettosend, int sockfd, struct sockaddr_in receiver_addr, size_t buffer_size){
     char buffer[buffer_size];
     memcpy(buffer, &packettosend, sizeof(packettosend));
+    receiver_addr.sin_family = AF_INET;
     if (sendto(sockfd, buffer, buffer_size, 0, (const struct sockaddr *) &receiver_addr, sizeof(receiver_addr)) < 0) {
             return 0;
         }
