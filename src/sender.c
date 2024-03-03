@@ -23,6 +23,7 @@ int packet_size = 0;
 int CWND_size = 0;
 int num_CWND_occupied = 0;
 int pack_num = -1;
+int bytesTransferring = 0;
 struct packet {
     int seq_num;
     int data_len;
@@ -119,7 +120,7 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
     SYN.seq_num = pack_num;
     SYN.acked = 0;
     SYN.data_len = SYN_size;
-    
+    sprintf(SYN.data,"%d",bytesTransferring);
     // advance global sequence number 
     pack_num++;
 
@@ -171,6 +172,7 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
 
 
 void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsigned long long int bytesToTransfer) {
+    bytesTransferring = bytesToTransfer;
     int sockfd;
     struct sockaddr_in receiver_addr;
     char buffer[DATA_SIZE];
@@ -281,7 +283,14 @@ void rsend(char* hostname, unsigned short int hostUDPport, char* filename, unsig
     if (bytesSent >= bytesToTransfer) {
         printf("Specified amount of data sent successfully.\n");
     } else {
-            printf("Reached end of file before sending specified amount of data.\n");
+        printf("Reached end of file before sending specified amount of data.\n");
+        struct packet FIN; 
+        FIN.seq_num = -2;
+        FIN.acked = 0;
+        if (send_packet(FIN, sockfd, receiver_addr, packet_size)== 0) {
+
+            printf("rsend failed \n");
+        } 
     }
     fclose(file);
     close(sockfd);

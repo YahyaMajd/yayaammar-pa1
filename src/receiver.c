@@ -50,7 +50,8 @@ struct ack_packet {
 int last_received_seq = -1;
 int RWND_idx = 0;
 struct packet RWND[100]; //size is a placeholder 
-
+int totalBytesReceived = 0;
+int totalToReceive = 1;
 int compare(const void *a, const void *b) {
     return ((struct packet*)a)->seq_num - ((struct packet*)b)->seq_num;
 }
@@ -144,6 +145,7 @@ int write_packet_to_file(struct packet packet, int writeRate){
             sleep(difftime(end_time, start_time));
         }
     }
+    totalBytesReceived += bytesWritten;
     return 1;
 }
 
@@ -232,21 +234,26 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
 
     struct sockaddr_in sender_addr;
     ssize_t bytesReceived;
-    while (1) {
+    while (totalBytesReceived < totalToReceive) {
         struct packet curr_packet;
         printf("receiving.....\n");
         if(receive_packet(sockfd,&curr_packet,&sender_addr,&bytesReceived) == 0) continue;
         
         // handshake check
+        if(curr_packet.seq_num == - 2){
+            break;
+        }
         if(curr_packet.seq_num == - 1){
             printf("handshake....\n");
+            totalToReceive = atoi(curr_packet.data);
+            printf("RECEIVING : %d\n", totalToReceive);
             initiate_connection(sockfd,  writeRate, &sender_addr);
         }
         else{
             // acknowledge packet
 
             // timoeut test
-            sleep(6);
+            
 
             if(!send_ack(sockfd,sender_addr,curr_packet.seq_num)){
                 printf("failed to send ack\n");
@@ -273,10 +280,7 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
                 write_packet_to_file(curr_packet, writeRate);
                // last_received_seq++;
                 printf("Last received = %d\n RWND_IDX = %d\n",last_received_seq, RWND_idx);
-                // write to file in order
-                // for(int i = 0; i < RWND_idx; i++) {
-                //         printf("Packet %d: Seq Num = %d\n", i, RWND[i].seq_num);
-                // }
+               
                 for(int i = 0; i < RWND_idx; i++){
                     // write the stuff in the window in order
                     if(RWND[i].seq_num == last_received_seq + 1){
@@ -297,7 +301,7 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
         }        
     }
 
-
+    printf("EXITING\n");
     fclose(file);
     close(sockfd);
 }
