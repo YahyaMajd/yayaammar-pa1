@@ -198,6 +198,7 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
      print_sender_port(sockfd);
     // receive packet with writeRate
     struct packet write_rate_packet;
+    printf("RECEIVING\n");
     while(1){
         if(receive_packet(sockfd, &write_rate_packet, receiver_addr) == 0){
             perror("failure receiving write rate");
