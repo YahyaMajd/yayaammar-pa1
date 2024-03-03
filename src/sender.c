@@ -80,7 +80,7 @@ void print_sender_port(int sockfd) {
     if (getsockname(sockfd, (struct sockaddr *)&sin, &len) == -1) {
         perror("getsockname failed");
     } else {
-        printf("Sender port: %d\n", ntohs(sin.sin_port));
+        printf("Sender port: %d IP: %s \n", ntohs(sin.sin_port),inet_ntoa(sin.sin_addr));
     }
 }
 
