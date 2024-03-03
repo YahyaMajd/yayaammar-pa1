@@ -60,26 +60,39 @@ void sortArr(struct packet arr[]){
 }
 
 // Function to receive a packet
-int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender_addr, ssize_t *bytesReceived) {
-    char buffer[sizeof(*packet)]; // Correctly use sizeof(*packet) to get the size of the structure
-    socklen_t addr_len = sizeof(*sender_addr);
-     *bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)sender_addr, &addr_len);
-    if (*bytesReceived < 0){
-        perror("recvfrom failed in receiver packets");
-        return 0;
+// Change the function signature
+int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in** sender_addr, ssize_t *bytesReceived) {
+    char buffer[sizeof(*packet)];
+    // Allocate memory for sender address
+    *sender_addr = (struct sockaddr_in*)malloc(sizeof(struct sockaddr_in));
+    if (*sender_addr == NULL) {
+        // Handle memory allocation failure
+        perror("Failed to allocate memory for sender address");
+        return -1; // or appropriate error handling
     }
-    
-    printf("Received %zd bytes\n", *bytesReceived); // Print the number of received bytes
-    // Optionally print the sender's IP address
+    socklen_t addr_len = sizeof(**sender_addr);
+
+    *bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)*sender_addr, &addr_len);
+    if (*bytesReceived < 0) {
+        // Free allocated memory in case of error
+        free(*sender_addr);
+        *sender_addr = NULL; // Avoid dangling pointer
+        perror("recvfrom failed in receiver packets");
+        return -1; // or appropriate error handling
+    }
+
+    printf("Received %zd bytes\n", *bytesReceived);
     char senderIP[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET,(const void *)&sender_addr->sin_addr, senderIP, sizeof(senderIP));
+    inet_ntop(AF_INET, &(*sender_addr)->sin_addr, senderIP, sizeof(senderIP));
     printf("From %s\n", senderIP);
 
-    // If the data is expected to be text, print the received text (ensure it's null-terminated)
-    buffer[*bytesReceived - 4] = '\0'; // Make sure there's no buffer overflow here
+    // Process packet data...
+    buffer[*bytesReceived] = '\0'; // Ensure null-termination
     memcpy(packet, buffer, sizeof(*packet));
+
     return 1; // Success
 }
+
 
 // Function to send packet
 int send_packet(struct packet packettosend, int sockfd, struct sockaddr_in receiver_addr, size_t buffer_size){
@@ -205,7 +218,6 @@ int initiate_connection(int sockfd, int writeRate, struct sockaddr_in *sender_ad
 void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long long int writeRate) {
     int sockfd;
     struct sockaddr_in my_addr;
-    char buffer[508];   
 
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd == -1) {
@@ -230,7 +242,7 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
         exit(EXIT_FAILURE);
     }
 
-    struct sockaddr_in sender_addr;
+    struct sockaddr_in *sender_addr;
     ssize_t bytesReceived;
     while (1) {
         struct packet curr_packet;
@@ -240,15 +252,13 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
         // handshake check
         if(curr_packet.seq_num == - 1){
             printf("handshake....\n");
-            initiate_connection(sockfd,  writeRate, &sender_addr);
+            initiate_connection(sockfd,  writeRate, sender_addr);
         }
         else{
             // acknowledge packet
 
             // timoeut test
-            sleep(6);
-
-            if(!send_ack(sockfd,sender_addr,curr_packet.seq_num)){
+            if(!send_ack(sockfd,*sender_addr,curr_packet.seq_num)){
                 printf("failed to send ack\n");
             }
             // if packet already received send ack ^^ and continue to next packet
@@ -273,10 +283,8 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
                 write_packet_to_file(curr_packet, writeRate);
                // last_received_seq++;
                 printf("Last received = %d\n RWND_IDX = %d\n",last_received_seq, RWND_idx);
+
                 // write to file in order
-                // for(int i = 0; i < RWND_idx; i++) {
-                //         printf("Packet %d: Seq Num = %d\n", i, RWND[i].seq_num);
-                // }
                 for(int i = 0; i < RWND_idx; i++){
                     // write the stuff in the window in order
                     if(RWND[i].seq_num == last_received_seq + 1){
@@ -297,7 +305,9 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
         }        
     }
 
-
+    if (sender_addr != NULL) {
+        free(sender_addr);
+    }
     fclose(file);
     close(sockfd);
 }
