@@ -53,6 +53,16 @@ int totalBytesReceived = 0;
 int totalToReceive = 1;
 
 
+void print_port(int sockfd) {
+    struct sockaddr_in sin;
+    socklen_t len = sizeof(sin);
+    if (getsockname(sockfd, (struct sockaddr *)&sin, &len) == -1) {
+        perror("getsockname failed");
+    } else {
+        printf("Sender port: %d IP: %s \n", ntohs(sin.sin_port),inet_ntoa(sin.sin_addr));
+    }
+}
+
 int compare(const void *a, const void *b) {
     return ((struct packet*)a)->seq_num - ((struct packet*)b)->seq_num;
 }
@@ -206,12 +216,11 @@ int initiate_connection(int sockfd, int writeRate, struct sockaddr_in *sender_ad
     SYN_ACK.seq_num = -1;
     sprintf(SYN_ACK.data,"%d",writeRate);
     SYN_ACK.acked = 0;
-    
+    print_port(sockfd);
     while(1){
         // check size (last argument)
         
         printf("%s : %d\n", inet_ntoa(sender_addr->sin_addr),ntohs(sender_addr->sin_port));
-        sleep(10);
         printf("sending writeRate packet...\n");
         if(send_packet(SYN_ACK, sockfd, *sender_addr, 500) == 0){
             perror("failure to send write rate");
