@@ -74,15 +74,6 @@ int send_packet(struct packet packettosend, int sockfd, struct sockaddr_in recei
     return 1;
 };
 
-void print_sender_port(int sockfd) {
-    struct sockaddr_in sin;
-    socklen_t len = sizeof(sin);
-    if (getsockname(sockfd, (struct sockaddr *)&sin, &len) == -1) {
-        perror("getsockname failed");
-    } else {
-        printf("Sender port: %d IP: %s \n", ntohs(sin.sin_port),inet_ntoa(sin.sin_addr));
-    }
-}
 
 /*
 @brief helper function to handle timeouts
@@ -195,10 +186,8 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
     if(send_packet(SYN, sockfd, *receiver_addr, SYN_size) == 0){
         perror("Failure to send SYN");
     }
-     print_sender_port(sockfd);
     // receive packet with writeRate
     struct packet write_rate_packet;
-    printf("RECEIVING\n");
     while(1){
         if(receive_packet(sockfd, &write_rate_packet, receiver_addr) == 0){
             perror("failure receiving write rate");
@@ -206,7 +195,7 @@ int initiate_connection(int sockfd, struct sockaddr_in* receiver_addr, size_t SY
             break;  
         }
     }
-     print_sender_port(sockfd);
+
     // deserialize write rate, figure out the congestion window and packet size
     int write_rate = atoi(write_rate_packet.data);
     // CWND calculation

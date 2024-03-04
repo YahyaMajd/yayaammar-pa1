@@ -42,7 +42,7 @@ DOXYFILE_ENCODING      = UTF-8
 # title of most generated pages and in a few other places.
 # The default value is: My Project.
 
-PROJECT_NAME           = "Ammar Yahya PA1"
+PROJECT_NAME           = "Yahya_AMMAR_PA"
 
 # The PROJECT_NUMBER tag can be used to enter a project or revision number. This
 # could be handy for archiving the generated documentation or if some version
@@ -1327,7 +1327,7 @@ HTML_FILE_EXTENSION    = .html
 
 HTML_HEADER            =
 
-# The HTML_FOOTER tag can be used to specify a user-defined HTML footer for each
+# The HTML_FOOTER tag can be: used to specify a user-defined HTML footer for each
 # generated HTML page. If the tag is left blank doxygen will generate a standard
 # footer. See HTML_HEADER for more information on how to generate a default
 # footer and what special commands can be used inside the footer. See also

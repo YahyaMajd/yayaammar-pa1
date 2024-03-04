@@ -28,7 +28,7 @@
 FILE *file;
 #define DATA_SIZE  508
 #define WRITERATE  508
-
+#define BUFFER_SIZE 520
 /*
 @brief packet structure, used to deserialize incoming packets
 */
@@ -53,15 +53,7 @@ int totalBytesReceived = 0;
 int totalToReceive = 1;
 
 
-void print_port(int sockfd) {
-    struct sockaddr_in sin;
-    socklen_t len = sizeof(sin);
-    if (getsockname(sockfd, (struct sockaddr *)&sin, &len) == -1) {
-        perror("getsockname failed");
-    } else {
-        printf("Sender port: %d IP: %s \n", ntohs(sin.sin_port),inet_ntoa(sin.sin_addr));
-    }
-}
+
 
 int compare(const void *a, const void *b) {
     return ((struct packet*)a)->seq_num - ((struct packet*)b)->seq_num;
@@ -216,16 +208,12 @@ int initiate_connection(int sockfd, int writeRate, struct sockaddr_in *sender_ad
     SYN_ACK.seq_num = -1;
     sprintf(SYN_ACK.data,"%d",writeRate);
     SYN_ACK.acked = 0;
-    print_port(sockfd);
+    
     while(1){
         // check size (last argument)
-        
-        printf("%s : %d\n", inet_ntoa(sender_addr->sin_addr),ntohs(sender_addr->sin_port));
-        printf("sending writeRate packet...\n");
-        if(send_packet(SYN_ACK, sockfd, *sender_addr, 520) == 0){
+        if(send_packet(SYN_ACK, sockfd, *sender_addr, BUFFER_SIZE) == 0){
             perror("failure to send write rate");
         } 
-         printf("sent writeRate packet...\n");
         char buffer[sizeof(struct ack_packet)];
         socklen_t addr_len = sizeof(*sender_addr);
         ssize_t bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)sender_addr, &addr_len);
@@ -278,7 +266,7 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
     my_addr.sin_family = AF_INET;
     my_addr.sin_addr.s_addr = INADDR_ANY;
     my_addr.sin_port = htons(myUDPport);
-    printf("%s : %d\n", inet_ntoa(my_addr.sin_addr),ntohs(my_addr.sin_port));
+    
     if (bind(sockfd, (const struct sockaddr *)&my_addr, sizeof(my_addr)) < 0) {
         perror("bind failed");
         exit(EXIT_FAILURE);
@@ -301,7 +289,6 @@ void rrecv(unsigned short int myUDPport, char* destinationFile, unsigned long lo
             break;
         }
         if(curr_packet.seq_num == - 1){
-            printf("handshake begins...\n");
             totalToReceive = atoi(curr_packet.data);
             initiate_connection(sockfd,  writeRate, &sender_addr);
         }
