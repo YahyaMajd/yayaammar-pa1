@@ -1,11 +1,10 @@
-
 /*
 @file receiver.c
 @brief the receiver file, implements rrcv 
 @author Ammar Sallam (asallam02)
 @author Yahya Abulmagd (YahyaMajd)
 
-@bugs works fine on Yahya's laptop (mac), gives an error on WSL and on cloudlab "Address family not supported"
+@bugs no known bugs
 */
 
 #include <stdbool.h>

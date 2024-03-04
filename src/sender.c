@@ -1,4 +1,3 @@
-
 /*
 @file sender.c
 @brief the sender file, implements rsend 
