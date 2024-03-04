@@ -151,7 +151,7 @@ void handle_ack_recv(struct packet *CWND[], int ack_seq_num){
 int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender_addr) {
     char buffer[sizeof(*packet)]; // Correctly use sizeof(*packet) to get the size of the structure
     socklen_t addr_len = sizeof(*sender_addr);
-    
+    printf("%s : %d\n", inet_ntoa(sender_addr->sin_addr),ntohs(sender_addr->sin_port));
     ssize_t bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0,
                                      (struct sockaddr*) sender_addr, &addr_len);
     if (bytesReceived < 0) {
