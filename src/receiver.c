@@ -75,7 +75,9 @@ void sortArr(struct packet arr[]){
 int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender_addr, ssize_t *bytesReceived) {
     char buffer[sizeof(*packet)]; // Correctly use sizeof(*packet) to get the size of the structure
     socklen_t addr_len = sizeof(*sender_addr);
-     *bytesReceived = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)sender_addr, &addr_len);
+    size_t size = 520;
+    *bytesReceived = recvfrom(sockfd, buffer,size , 0, (struct sockaddr*)sender_addr, &addr_len);
+
     if (*bytesReceived < 0){
         perror("recvfrom failed in receiver packets");
         return 0;
@@ -83,7 +85,9 @@ int receive_packet(int sockfd, struct packet* packet, struct sockaddr_in* sender
 
     // If the data is expected to be text, print the received text (ensure it's null-terminated)
     buffer[*bytesReceived] = '\0'; // Make sure there's no buffer overflow here
+    
     memcpy(packet, buffer, sizeof(*packet));
+   
     return 1; // Success
 }
 
